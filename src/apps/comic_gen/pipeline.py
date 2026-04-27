@@ -1974,10 +1974,16 @@ class ComicGenPipeline:
             task.status = "processing"
             self._save_data()
             
-            # Download image to temp file
+            # With OSS, task.image_url is a public URL — pass directly, no local download needed.
+            # Without OSS (or if URL is a local relative path), download to a temp file first.
             img_path = None
             if task.image_url:
-                img_path = self._download_temp_image(task.image_url)
+                from ...utils.oss_utils import is_oss_configured
+                is_http = task.image_url.startswith("http://") or task.image_url.startswith("https://")
+                if is_oss_configured() and is_http:
+                    pass  # img_url will carry it
+                else:
+                    img_path = self._download_temp_image(task.image_url)
             
             # Generate video
             output_filename = f"video_{task_id}.mp4"
