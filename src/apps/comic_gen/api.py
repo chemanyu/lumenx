@@ -76,6 +76,11 @@ app.mount("/files/videos", StaticFiles(directory="output/video"), name="files_vi
 app.mount("/files/assets", StaticFiles(directory="output/assets"), name="files_assets")
 app.mount("/files", StaticFiles(directory="output"), name="files")
 
+# Mount frontend static files if directory exists
+import os as _os
+if _os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+
 
 # Initialize pipeline
 pipeline = ComicGenPipeline()
