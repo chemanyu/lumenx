@@ -111,6 +111,10 @@ class TTSProcessor:
         # Resolve the correct model for the voice if it's a known voice
         model = self._resolve_model_for_voice(voice)
 
+        # If voice is a registry key, use the model_id (actual API voice name)
+        if voice in VOICES:
+            voice = VOICES[voice]['model_id']
+
         logger.info(f"Synthesizing with model={model}, voice='{voice}' (rate={speech_rate}, pitch={pitch_rate}, vol={volume})...")
         logger.info(f"Text: {text[:100]}{'...' if len(text) > 100 else ''}")
 
@@ -129,6 +133,13 @@ class TTSProcessor:
 
         # Synthesize audio (blocking call, returns bytes)
         audio_data = synthesizer.call(text)
+
+        if audio_data is None:
+            request_id = synthesizer.get_last_request_id()
+            raise RuntimeError(
+                f"TTS API returned no audio data (request_id={request_id}). "
+                "Check that the voice_id is valid for the selected model, and that DASHSCOPE_API_KEY has TTS permissions."
+            )
 
         # Get metrics
         request_id = synthesizer.get_last_request_id()
@@ -150,6 +161,10 @@ class TTSProcessor:
         v2 voices require cosyvoice-v2, v3 voices require cosyvoice-v3-flash/plus.
         Falls back to self.model if voice is not in the registry (e.g. cloned voices).
         """
+        # Look up by key first (e.g. 'longcheng')
+        if voice_id in VOICES:
+            return VOICES[voice_id].get('model', self.model)
+        # Fall back to matching model_id (e.g. 'longcheng_v2')
         for meta in VOICES.values():
             if meta['model_id'] == voice_id:
                 return meta.get('model', self.model)

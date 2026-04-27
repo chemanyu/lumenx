@@ -15,5 +15,7 @@ class ModelFactory:
         elif model_name in ('vidu', 'viduq3-pro', 'viduq3-turbo'):
             from .vidu import ViduModel
             return ViduModel(config.get('model') or {})
+        elif model_name in ('happyhorse', 'happyhorse-1.0-t2v', 'happyhorse-1.0-i2v'):
+            return WanxModel(config.get('model') or {})
         else:
             raise ValueError(f"Unknown model: {model_name}")

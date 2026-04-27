@@ -179,11 +179,6 @@ class WanxModel(VideoGenModel):
             "policy": "policy",
             "signature": "signature",
             "oss_access_key_id": "OSSAccessKeyId",
-            "x_oss_security_token": "x-oss-security-token",
-            "x_oss_signature_version": "x-oss-signature-version",
-            "x_oss_credential": "x-oss-credential",
-            "x_oss_date": "x-oss-date",
-            "x_oss_signature": "x-oss-signature",
             "success_action_status": "success_action_status",
             "callback": "callback",
         }
@@ -192,9 +187,13 @@ class WanxModel(VideoGenModel):
             if value:
                 form_data[target_key] = str(value)
 
+        # Map all x_oss_* (underscore) fields to x-oss-* (hyphen) form fields
         for key, value in policy_data.items():
-            if key.startswith("x-oss-") and value and key not in form_data:
-                form_data[key] = str(value)
+            if value:
+                if key.startswith("x_oss_"):
+                    form_data[key.replace("_", "-")] = str(value)
+                elif key.startswith("x-oss-") and key not in form_data:
+                    form_data[key] = str(value)
 
         with open(local_path, "rb") as file_handle:
             files = {"file": (os.path.basename(local_path), file_handle)}
@@ -350,6 +349,35 @@ class WanxModel(VideoGenModel):
                     shot_type=shot_type,
                     seed=seed,
                     extra_headers=extra_media_headers,
+                )
+            elif final_model_name == 'happyhorse-1.0-i2v':
+                image_ref = img_path or img_url
+                if not image_ref:
+                    raise ValueError("happyhorse-1.0-i2v requires img_path or img_url")
+                # HH API needs a public HTTP URL — upload any local path to OSS
+                local_ref = img_path or (img_url if img_url and not img_url.startswith(("http://", "https://")) else None)
+                if local_ref:
+                    object_key = uploader.upload_image(local_ref)
+                    if not object_key:
+                        raise RuntimeError("happyhorse-1.0-i2v: OSS upload failed, cannot generate signed URL for image")
+                    img_url = uploader.sign_url_for_api(object_key)
+                video_url = self._generate_hh_i2v_http(
+                    prompt=prompt,
+                    img_url=img_url,
+                    model_name=final_model_name,
+                    resolution=resolution,
+                    duration=duration,
+                    seed=seed,
+                    watermark=watermark,
+                )
+            elif final_model_name == 'happyhorse-1.0-t2v':
+                video_url = self._generate_hh_t2v_http(
+                    prompt=prompt,
+                    model_name=final_model_name,
+                    resolution=resolution,
+                    duration=duration,
+                    seed=seed,
+                    watermark=watermark,
                 )
             else:
                 # Use SDK for other models
@@ -594,8 +622,133 @@ class WanxModel(VideoGenModel):
             
             elif task_status in ['CANCELED', 'UNKNOWN']:
                 raise RuntimeError(f"{model_name} task {task_status}: {poll_result}")
-            
+
         raise RuntimeError(f"{model_name} task timed out after {max_wait_time}s")
+
+    def _poll_dashscope_task(self, task_id: str, model_name: str, max_wait_time: int = 900, poll_interval: int = 15) -> str:
+        """Poll a DashScope async task until completion and return the video_url."""
+        base = get_provider_base_url("DASHSCOPE")
+        poll_url = f"{base}/api/v1/tasks/{task_id}"
+        poll_headers = {"Authorization": f"Bearer {self.api_key}"}
+        elapsed = 0
+
+        while elapsed < max_wait_time:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+            poll_response = requests.get(poll_url, headers=poll_headers, timeout=30)
+            if poll_response.status_code != 200:
+                logger.warning(f"Poll request failed: {poll_response.status_code}")
+                continue
+
+            poll_result = poll_response.json()
+            task_status = poll_result.get('output', {}).get('task_status')
+            logger.info(f"Task {task_id} status: {task_status} (elapsed: {elapsed}s)")
+
+            if task_status == 'SUCCEEDED':
+                video_url = poll_result.get('output', {}).get('video_url')
+                if not video_url:
+                    raise RuntimeError(f"No video_url in completed task: {poll_result}")
+                logger.info(f"Task completed. Video URL: {video_url}")
+                return video_url
+            elif task_status == 'FAILED':
+                error_msg = poll_result.get('output', {}).get('message', 'Unknown error')
+                code = poll_result.get('output', {}).get('code', '')
+                raise RuntimeError(f"{model_name} task failed: {code} - {error_msg}")
+            elif task_status in ['CANCELED', 'UNKNOWN']:
+                raise RuntimeError(f"{model_name} task {task_status}: {poll_result}")
+
+        raise RuntimeError(f"{model_name} task timed out after {max_wait_time}s")
+
+    def _generate_hh_t2v_http(self, prompt: str, model_name: str = "happyhorse-1.0-t2v",
+                               resolution: str = "1080P", duration: int = 5,
+                               seed: int = None, watermark: bool = False) -> str:
+        """Generate video using HappyHorse T2V via DashScope HTTP API."""
+        base = get_provider_base_url("DASHSCOPE")
+        create_url = f"{base}/api/v1/services/aigc/video-generation/video-synthesis"
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "X-DashScope-Async": "enable",
+        }
+
+        payload = {
+            "model": model_name,
+            "input": {"prompt": prompt},
+            "parameters": {
+                "resolution": resolution.upper(),
+                "duration": duration,
+                "watermark": watermark,
+            },
+        }
+        if seed is not None:
+            payload["parameters"]["seed"] = seed
+
+        logger.info(f"[HH] Calling {model_name} T2V HTTP API...")
+        logger.info(f"[HH] Payload: {payload}")
+
+        response = requests.post(create_url, headers=headers, json=payload, timeout=120)
+        logger.info(f"[HH] Create task response: {response.status_code} {response.text[:300]}")
+
+        if response.status_code != 200:
+            error_data = response.json() if response.text else {}
+            raise RuntimeError(f"[HH] {model_name} task creation failed: {error_data.get('message', response.text)}")
+
+        result = response.json()
+        task_id = result.get('output', {}).get('task_id')
+        if not task_id:
+            raise RuntimeError(f"[HH] No task_id in response: {result}")
+
+        logger.info(f"[HH] Task created: {task_id}")
+        return self._poll_dashscope_task(task_id, model_name)
+
+    def _generate_hh_i2v_http(self, prompt: str, img_url: str,
+                               model_name: str = "happyhorse-1.0-i2v",
+                               resolution: str = "1080P", duration: int = 5,
+                               seed: int = None, watermark: bool = False) -> str:
+        """Generate video using HappyHorse I2V via DashScope HTTP API."""
+        base = get_provider_base_url("DASHSCOPE")
+        create_url = f"{base}/api/v1/services/aigc/video-generation/video-synthesis"
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "X-DashScope-Async": "enable",
+        }
+
+        payload = {
+            "model": model_name,
+            "input": {
+                "media": [{"url": img_url, "type": "first_frame"}],
+                "prompt": prompt,
+            },
+            "parameters": {
+                "resolution": resolution.upper(),
+                "duration": duration,
+                "watermark": watermark,
+            },
+        }
+        if seed is not None:
+            payload["parameters"]["seed"] = seed
+
+        logger.info(f"[HH] Calling {model_name} I2V HTTP API...")
+        logger.info(f"[HH] Payload: {payload}")
+
+        response = requests.post(create_url, headers=headers, json=payload, timeout=120)
+        logger.info(f"[HH] Create task response: {response.status_code} {response.text[:300]}")
+
+        if response.status_code != 200:
+            error_data = response.json() if response.text else {}
+            raise RuntimeError(f"[HH] {model_name} task creation failed: {error_data.get('message', response.text)}")
+
+        result = response.json()
+        task_id = result.get('output', {}).get('task_id')
+        if not task_id:
+            raise RuntimeError(f"[HH] No task_id in response: {result}")
+
+        logger.info(f"[HH] Task created: {task_id}")
+        return self._poll_dashscope_task(task_id, model_name)
 
     def _generate_sdk(self, prompt: str, model_name: str, img_url: str = None, size: str = "1280*720",
                       duration: int = 5, prompt_extend: bool = True, negative_prompt: str = None,

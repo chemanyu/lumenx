@@ -145,6 +145,23 @@ DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
             "vendor": "pixverse_vendor_video_url",
         },
     ),
+    ProviderFamilyConfig(
+        model_family="happyhorse-",
+        backend_default="dashscope",
+        credential_sources={
+            "dashscope": ("DASHSCOPE_API_KEY",),
+        },
+        supported_modalities=("t2v", "i2v"),
+        image_input_mode={
+            "dashscope": "dashscope_image_url",
+        },
+        audio_input_mode={
+            "dashscope": "dashscope_temp_file_url",
+        },
+        reference_video_input_mode={
+            "dashscope": "dashscope_temp_file_url",
+        },
+    ),
 )
 
 

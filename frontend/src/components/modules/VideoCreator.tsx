@@ -16,7 +16,7 @@ import {
 
 
 
-import { useProjectStore } from "@/store/projectStore";
+import { useProjectStore, I2V_MODELS } from "@/store/projectStore";
 import { api, API_URL, VideoTask } from "@/lib/api";
 import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
@@ -81,15 +81,26 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     // R2V Cast Slots: 3 slots for reference videos
     const [castSlots, setCastSlots] = useState<{ url: string; name: string }[]>([]);
     const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null); // Selected frame for R2V
-    const [generationMode, setGenerationMode] = useState<"i2v" | "r2v">("i2v"); // Local mode state
+    const [generationMode, setGenerationMode] = useState<"i2v" | "r2v" | "t2v">("i2v"); // Local mode state
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
 
-    // Sync from parent params
+    // Sync from parent params; also auto-switch to t2v when a t2vOnly model is selected
     useEffect(() => {
         if (params.generationMode) {
-            setGenerationMode(params.generationMode as "i2v" | "r2v");
+            setGenerationMode(params.generationMode as "i2v" | "r2v" | "t2v");
         }
     }, [params.generationMode]);
+
+    const selectedModelConfig = I2V_MODELS.find(m => m.id === params.model);
+    const isT2VModel = !!selectedModelConfig?.params?.t2vOnly;
+
+    useEffect(() => {
+        if (isT2VModel && generationMode !== 't2v') {
+            setGenerationMode('t2v');
+        } else if (!isT2VModel && generationMode === 't2v') {
+            setGenerationMode('i2v');
+        }
+    }, [isT2VModel]);
 
     const handleExtractLastFrame = async (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -291,7 +302,10 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
 
     const handleSubmit = async () => {
         // Validation based on mode
-        if (generationMode === 'i2v') {
+        if (generationMode === 't2v') {
+            // T2V mode: only prompt is required, no image needed
+            if (!prompt || !currentProject) return;
+        } else if (generationMode === 'i2v') {
             if (selectedImages.length === 0 || !prompt || !currentProject) return;
         } else {
             // R2V mode: need at least one cast slot filled
@@ -315,9 +329,12 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             // Determine items to process
             // In I2V: process selected images
             // In R2V: process selected images OR a single task if no image selected
+            // In T2V: single task with no image
             let itemsToProcess = selectedImages;
             if (generationMode === 'r2v' && selectedImages.length === 0) {
                 itemsToProcess = [""]; // Dummy item to trigger one iteration
+            } else if (generationMode === 't2v') {
+                itemsToProcess = [""]; // T2V needs no image
             }
 
             itemsToProcess.forEach((img, idx) => {
@@ -379,10 +396,9 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     finalImageUrl = img.replace(`${API_URL}/files/`, "");
                 }
 
-                // Find frame ID - use selectedFrameId directly for R2V mode
+                // Find frame ID - use selectedFrameId directly for R2V/T2V mode
                 let frameId: string | undefined;
-                if (generationMode === 'r2v') {
-                    // R2V mode: use the explicitly selected frame
+                if (generationMode === 'r2v' || generationMode === 't2v') {
                     frameId = selectedFrameId || undefined;
                 } else {
                     // I2V mode: find frame by matching image URL (check rendered_image_url first, then image_url)
@@ -395,7 +411,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                 }
 
                 // Determine model based on generation mode
-                // R2V mode uses wan2.6-r2v, I2V uses selected model
+                // R2V mode uses wan2.6-r2v; T2V and I2V use the selected model
                 const actualModel = generationMode === 'r2v' ? 'wan2.6-r2v' : params.model;
 
                 // Get reference video URLs from cast slots for R2V

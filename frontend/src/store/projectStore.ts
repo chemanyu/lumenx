@@ -171,6 +171,8 @@ export interface ModelParamSupport {
     // Vidu
     viduAudio?: boolean;
     movementAmplitude?: { options: string[]; default: string };
+    // HappyHorse T2V: model does not require an input image
+    t2vOnly?: boolean;
 }
 
 export interface I2VModelConfig {
@@ -209,6 +211,11 @@ const VIDU_PARAMS: ModelParamSupport = {
     movementAmplitude: { options: ['auto', 'small', 'medium', 'large'], default: 'auto' },
 };
 
+const HH_PARAMS: ModelParamSupport = {
+    resolution: { options: ['720P', '1080P'], default: '1080P' },
+    seed: true,
+};
+
 export const I2V_MODELS: I2VModelConfig[] = [
     { id: 'wan2.6-i2v', name: 'Wan 2.6 I2V / R2V', description: 'Latest model, supports R2V',
       duration: { type: 'slider', min: 2, max: 15, step: 1, default: 5 }, params: WAN26_PARAMS },
@@ -226,6 +233,10 @@ export const I2V_MODELS: I2VModelConfig[] = [
       duration: { type: 'slider', min: 1, max: 16, step: 1, default: 5 }, params: VIDU_PARAMS },
     { id: 'viduq3-turbo', name: 'Vidu Q3 Turbo', description: 'Vidu fast generation',
       duration: { type: 'slider', min: 1, max: 16, step: 1, default: 5 }, params: VIDU_PARAMS },
+    { id: 'happyhorse-1.0-i2v', name: 'HappyHorse I2V', description: 'HappyHorse image-to-video',
+      duration: { type: 'slider', min: 3, max: 15, step: 1, default: 5 }, params: HH_PARAMS },
+    { id: 'happyhorse-1.0-t2v', name: 'HappyHorse T2V', description: 'HappyHorse text-to-video (no image needed)',
+      duration: { type: 'slider', min: 3, max: 15, step: 1, default: 5 }, params: { ...HH_PARAMS, t2vOnly: true } },
 ];
 
 export const ASPECT_RATIOS = [

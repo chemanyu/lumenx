@@ -2264,9 +2264,12 @@ class ComicGenPipeline:
             # Generate Dialogue
             if frame.dialogue:
                 speaker = None
-                if frame.character_ids:
+                # First try to match by frame.speaker name, then fall back to first character
+                if frame.speaker:
+                    speaker = next((c for c in script.characters if c.name == frame.speaker), None)
+                if not speaker and frame.character_ids:
                     speaker = next((c for c in script.characters if c.id == frame.character_ids[0]), None)
-                
+
                 if speaker:
                     self.audio_generator.generate_dialogue(
                         frame, speaker,
@@ -2302,9 +2305,11 @@ class ComicGenPipeline:
             
         if frame.dialogue:
             speaker = None
-            if frame.character_ids:
+            if frame.speaker:
+                speaker = next((c for c in script.characters if c.name == frame.speaker), None)
+            if not speaker and frame.character_ids:
                 speaker = next((c for c in script.characters if c.id == frame.character_ids[0]), None)
-            
+
             if speaker:
                 self.audio_generator.generate_dialogue(frame, speaker, speed, pitch, volume)
                 
