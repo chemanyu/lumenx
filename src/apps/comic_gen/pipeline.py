@@ -1244,7 +1244,7 @@ class ComicGenPipeline:
                             duration=duration,
                             created_at=time.time(),
                             generate_audio=bool(audio_url),
-                            model="wan2.6-i2v",
+                            model="happyhorse-1.0-i2v",
                             generation_mode="i2v"  # Image to video (motion reference)
                         )
 
@@ -1393,7 +1393,7 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.6-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "happyhorse-1.0-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -2194,7 +2194,7 @@ class ComicGenPipeline:
             status="pending",
             duration=duration,
             resolution=resolution,
-            model="wan2.6-i2v", # Asset video uses I2V
+            model="happyhorse-1.0-i2v", # Asset video uses I2V
             created_at=time.time()
         )
         

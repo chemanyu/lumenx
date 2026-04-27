@@ -16,7 +16,7 @@ interface SeriesModelSettingsModalProps {
 export default function SeriesModelSettingsModal({ isOpen, onClose, seriesId, onSaved }: SeriesModelSettingsModalProps) {
     const [t2iModel, setT2iModel] = useState('wan2.5-t2i-preview');
     const [i2iModel, setI2iModel] = useState('wan2.5-i2i-preview');
-    const [i2vModel, setI2vModel] = useState('wan2.5-i2v-preview');
+    const [i2vModel, setI2vModel] = useState('happyhorse-1.0-i2v');
     const [characterAspectRatio, setCharacterAspectRatio] = useState('9:16');
     const [sceneAspectRatio, setSceneAspectRatio] = useState('16:9');
     const [propAspectRatio, setPropAspectRatio] = useState('1:1');
@@ -34,7 +34,7 @@ export default function SeriesModelSettingsModal({ isOpen, onClose, seriesId, on
                     if (data) {
                         setT2iModel(data.t2i_model || 'wan2.5-t2i-preview');
                         setI2iModel(data.i2i_model || 'wan2.5-i2i-preview');
-                        setI2vModel(data.i2v_model || 'wan2.5-i2v-preview');
+                        setI2vModel(data.i2v_model || 'happyhorse-1.0-i2v');
                         setCharacterAspectRatio(data.character_aspect_ratio || '9:16');
                         setSceneAspectRatio(data.scene_aspect_ratio || '16:9');
                         setPropAspectRatio(data.prop_aspect_ratio || '1:1');

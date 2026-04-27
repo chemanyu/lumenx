@@ -17,7 +17,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
 
     const [t2iModel, setT2iModel] = useState(currentProject?.model_settings?.t2i_model || 'wan2.5-t2i-preview');
     const [i2iModel, setI2iModel] = useState(currentProject?.model_settings?.i2i_model || 'wan2.5-i2i-preview');
-    const [i2vModel, setI2vModel] = useState(currentProject?.model_settings?.i2v_model || 'wan2.5-i2v-preview');
+    const [i2vModel, setI2vModel] = useState(currentProject?.model_settings?.i2v_model || 'happyhorse-1.0-i2v');
     const [characterAspectRatio, setCharacterAspectRatio] = useState(currentProject?.model_settings?.character_aspect_ratio || '9:16');
     const [sceneAspectRatio, setSceneAspectRatio] = useState(currentProject?.model_settings?.scene_aspect_ratio || '16:9');
     const [propAspectRatio, setPropAspectRatio] = useState(currentProject?.model_settings?.prop_aspect_ratio || '1:1');
@@ -29,7 +29,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
         if (currentProject?.model_settings) {
             setT2iModel(currentProject.model_settings.t2i_model || 'wan2.5-t2i-preview');
             setI2iModel(currentProject.model_settings.i2i_model || 'wan2.5-i2i-preview');
-            setI2vModel(currentProject.model_settings.i2v_model || 'wan2.5-i2v-preview');
+            setI2vModel(currentProject.model_settings.i2v_model || 'happyhorse-1.0-i2v');
             setCharacterAspectRatio(currentProject.model_settings.character_aspect_ratio || '9:16');
             setSceneAspectRatio(currentProject.model_settings.scene_aspect_ratio || '16:9');
             setPropAspectRatio(currentProject.model_settings.prop_aspect_ratio || '1:1');
