@@ -585,7 +585,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     setGenerationMode("r2v");
                                     onParamsChange({
                                         generationMode: "r2v",
-                                        model: "wan2.6-i2v" // Force Wan 2.6 when switching to R2V
+                                        model: "happyhorse-1.0-i2v" // Default to HappyHorse for R2V
                                     });
                                 }}
                                 className={`px-5 py-2.5 text-sm rounded-lg flex items-center gap-2 transition-all font-medium ${generationMode === "r2v"
@@ -933,7 +933,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 </div>
                                 {availableReferenceVideos.length === 0 && (
                                     <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-                                        ⚠️ 无可用的参考视频。请先在 Assets 阶段为角色/场景生成 Motion Reference 视频。
+                                        ⚠️ 无可用的参考视频。请先在 Assets 阶段为角色（Full Body / Headshot）生成 Motion Reference 视频。道具和场景资产暂不支持作为卡司槽位。
                                     </p>
                                 )}
                             </div>

@@ -152,20 +152,17 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
                                     Basic Settings
                                 </h3>
 
-                                {/* Model Selection - R2V mode: only Wan 2.6 is selectable */}
+                                {/* Model Selection */}
                                 <div>
                                     <label className="block text-xs text-gray-400 mb-2">
                                         Model (模型)
-                                        {params.generationMode === "r2v" && (
-                                            <span className="text-purple-400 ml-2">(R2V仅支持 Wan 2.6)</span>
-                                        )}
                                     </label>
                                     <div className="space-y-2">
                                         {I2V_MODELS.map((model) => {
                                             const isR2VMode = params.generationMode === "r2v";
-                                            const isWan26 = model.id === "wan2.6-i2v";
-                                            const isDisabled = isR2VMode && !isWan26;
-                                            const isSelected = isR2VMode ? isWan26 : params.model === model.id;
+                                            const isR2VSupported = model.id === "wan2.6-i2v" || model.id === "happyhorse-1.0-i2v";
+                                            const isDisabled = isR2VMode && !isR2VSupported;
+                                            const isSelected = params.model === model.id;
 
                                             return (
                                                 <button

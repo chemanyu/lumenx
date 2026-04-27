@@ -275,11 +275,9 @@ class AssetGenerator:
 
             # 2. Three View Sheet (Derived)
             if generation_type in ["all", "three_view"]:
-                if not prompt or generation_type == "all":
-                    # Add reference consistency emphasis
-                    base_prompt = f"Character Reference Sheet for {character.name}. {character.description}. Three-view character design: Front view, Side view, and Back view. STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality."
-                else:
-                    base_prompt = prompt
+                # Use user prompt as character description, always keep three-view structure
+                char_desc = prompt if prompt else character.description
+                base_prompt = f"Character Reference Sheet for {character.name}. {char_desc}. Three-view character design: Front view, Side view, and Back view. STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality."
                 
                 # Save the user's prompt WITHOUT style suffix
                 character.three_view_prompt = base_prompt
@@ -353,11 +351,9 @@ class AssetGenerator:
 
             # 3. Headshot (Derived)
             if generation_type in ["all", "headshot"]:
-                if not prompt or generation_type == "all":
-                    # Add reference consistency emphasis
-                    base_prompt = f"Close-up portrait of the SAME character {character.name}. {character.description}. STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece."
-                else:
-                    base_prompt = prompt
+                # Use user prompt as character description, always keep headshot structure
+                char_desc = prompt if prompt else character.description
+                base_prompt = f"Close-up portrait of the SAME character {character.name}. {char_desc}. STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece."
                 
                 # Save the user's prompt WITHOUT style suffix
                 character.headshot_prompt = base_prompt
