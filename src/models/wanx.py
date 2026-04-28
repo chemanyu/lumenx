@@ -246,6 +246,9 @@ class WanxModel(VideoGenModel):
         camera_motion = kwargs.get('camera_motion')
         subject_motion = kwargs.get('subject_motion')
 
+        # HH ratio param
+        ratio = kwargs.get('ratio') or self.params.get('ratio', None)
+
         logger.info(f"Starting generation with model: {final_model_name}")
         logger.info(f"Prompt: {prompt}")
 
@@ -366,6 +369,7 @@ class WanxModel(VideoGenModel):
                     img_url=img_url,
                     model_name=final_model_name,
                     resolution=resolution,
+                    ratio=ratio,
                     duration=duration,
                     seed=seed,
                     watermark=watermark,
@@ -375,6 +379,7 @@ class WanxModel(VideoGenModel):
                     prompt=prompt,
                     model_name=final_model_name,
                     resolution=resolution,
+                    ratio=ratio,
                     duration=duration,
                     seed=seed,
                     watermark=watermark,
@@ -661,7 +666,7 @@ class WanxModel(VideoGenModel):
         raise RuntimeError(f"{model_name} task timed out after {max_wait_time}s")
 
     def _generate_hh_t2v_http(self, prompt: str, model_name: str = "happyhorse-1.0-t2v",
-                               resolution: str = "1080P", duration: int = 5,
+                               resolution: str = "1080P", ratio: str = None, duration: int = 5,
                                seed: int = None, watermark: bool = False) -> str:
         """Generate video using HappyHorse T2V via DashScope HTTP API."""
         base = get_provider_base_url("DASHSCOPE")
@@ -682,6 +687,8 @@ class WanxModel(VideoGenModel):
                 "watermark": watermark,
             },
         }
+        if ratio:
+            payload["parameters"]["ratio"] = ratio
         if seed is not None:
             payload["parameters"]["seed"] = seed
 
@@ -705,7 +712,7 @@ class WanxModel(VideoGenModel):
 
     def _generate_hh_i2v_http(self, prompt: str, img_url: str,
                                model_name: str = "happyhorse-1.0-i2v",
-                               resolution: str = "1080P", duration: int = 5,
+                               resolution: str = "1080P", ratio: str = None, duration: int = 5,
                                seed: int = None, watermark: bool = False) -> str:
         """Generate video using HappyHorse I2V via DashScope HTTP API."""
         base = get_provider_base_url("DASHSCOPE")
@@ -729,6 +736,8 @@ class WanxModel(VideoGenModel):
                 "watermark": watermark,
             },
         }
+        if ratio:
+            payload["parameters"]["ratio"] = ratio
         if seed is not None:
             payload["parameters"]["seed"] = seed
 

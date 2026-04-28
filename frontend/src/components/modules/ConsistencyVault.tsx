@@ -365,21 +365,21 @@ export default function ConsistencyVault() {
                         active={activeTab === "character"}
                         onClick={() => setActiveTab("character")}
                         icon={<User size={18} />}
-                        label="Characters"
+                        label="角色"
                         count={currentProject?.characters?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "scene"}
                         onClick={() => setActiveTab("scene")}
                         icon={<MapPin size={18} />}
-                        label="Scenes"
+                        label="场景"
                         count={currentProject?.scenes?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "prop"}
                         onClick={() => setActiveTab("prop")}
                         icon={<Box size={18} />}
-                        label="Props"
+                        label="道具"
                         count={currentProject?.props?.length || 0}
                     />
                 </div>
@@ -401,14 +401,14 @@ export default function ConsistencyVault() {
             <div className="flex-1 overflow-y-auto p-6">
                 {!currentProject ? (
                     <div className="flex items-center justify-center h-full text-gray-500">
-                        Loading project...
+                        加载中...
                     </div>
                 ) : assets?.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
                         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                             {activeTab === "character" ? <User size={32} /> : activeTab === "scene" ? <MapPin size={32} /> : <Box size={32} />}
                         </div>
-                        <p>No {activeTab}s found</p>
+                        <p>暂无{activeTab === "character" ? "角色" : activeTab === "scene" ? "场景" : "道具"}</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -438,7 +438,7 @@ export default function ConsistencyVault() {
                         >
                             <div className="flex flex-col items-center gap-3 text-gray-400 group-hover:text-primary transition-colors">
                                 <Plus size={40} />
-                                <span className="text-sm font-medium">Add {activeTab}</span>
+                                <span className="text-sm font-medium">添加{activeTab === "character" ? "角色" : activeTab === "scene" ? "场景" : "道具"}</span>
                             </div>
                         </motion.div>
                     </div>
@@ -768,7 +768,7 @@ function TabButton({ active, onClick, icon, label, count }: any) {
         >
             <div className="flex items-center gap-3">
                 {icon}
-                <span className="font-bold text-sm">{label}</span>
+                <span className="font-bold text-sm whitespace-nowrap">{label}</span>
             </div>
             <span className="text-xs bg-black/30 px-2 py-0.5 rounded-full">{count}</span>
         </button>

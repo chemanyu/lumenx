@@ -9,7 +9,8 @@ import {
     Check,
     Image as ImageIcon,
     Users,
-    Film
+    Film,
+    Type
 } from "lucide-react";
 
 
@@ -442,7 +443,9 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     params.cfgScale,
                     // Vidu params
                     params.viduAudio,
-                    params.movementAmplitude
+                    params.movementAmplitude,
+                    // HH ratio
+                    params.ratio
                 );
             }
 
@@ -595,6 +598,22 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                             >
                                 <Film size={16} />
                                 🎬 角色驱动 (R2V)
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setGenerationMode("t2v");
+                                    onParamsChange({
+                                        generationMode: "t2v",
+                                        model: "happyhorse-1.0-t2v"
+                                    });
+                                }}
+                                className={`px-5 py-2.5 text-sm rounded-lg flex items-center gap-2 transition-all font-medium ${generationMode === "t2v"
+                                    ? "bg-green-600 text-white shadow-lg"
+                                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                                    }`}
+                            >
+                                <Type size={16} />
+                                ✍️ 文字驱动 (T2V)
                             </button>
                         </div>
                     </div>
@@ -1010,6 +1029,8 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 onChange={setSegments}
                                 placeholder={generationMode === 'r2v'
                                     ? "输入提示词... \n插入角色格式: [character1:名称]\n插入运镜格式: (camera: 运镜指令)"
+                                    : generationMode === 't2v'
+                                    ? "输入文字描述，HH T2V 将直接生成视频..."
                                     : "输入提示词，描述画面内容...\n插入运镜格式: (camera: 运镜指令)"
                                 }
                             />

@@ -341,6 +341,27 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
                                     </div>
                                 )}
 
+                                {/* Ratio - HH only */}
+                                {modelParams.ratio && (
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-2">Ratio (宽高比)</label>
+                                        <div className="grid grid-cols-5 gap-1.5">
+                                            {modelParams.ratio.options.map(r => (
+                                                <button
+                                                    key={r}
+                                                    onClick={() => updateParam("ratio", r)}
+                                                    className={`py-1.5 text-xs rounded-lg border transition-all ${params.ratio === r
+                                                        ? "bg-blue-500/20 border-blue-500 text-blue-500"
+                                                        : "bg-white/5 border-transparent text-gray-400 hover:bg-white/10"
+                                                        }`}
+                                                >
+                                                    {r}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Batch Size */}
                                 <div>
                                     <label className="block text-xs text-gray-400 mb-2">Batch Size (生成数量)</label>

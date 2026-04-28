@@ -136,10 +136,10 @@ function AssetsInspector({ project }: { project: any }) {
         <div className="space-y-6">
             <div className="space-y-3">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Users size={14} /> Asset Overview
+                    <Users size={14} /> 资产总览
                 </h3>
                 <div className="text-xs text-gray-400">
-                    Manage aspect ratios and view global style settings.
+                    管理宽高比并查看全局风格设置。
                 </div>
             </div>
 
@@ -147,12 +147,12 @@ function AssetsInspector({ project }: { project: any }) {
             <div className="space-y-4 pt-4 border-t border-white/10">
                 <div className="flex items-center gap-2 mb-2">
                     <Layout className="text-primary" size={14} />
-                    <h3 className="font-bold text-white text-xs">Aspect Ratios</h3>
+                    <h3 className="font-bold text-white text-xs">宽高比</h3>
                 </div>
 
                 {/* Character Aspect Ratio */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase">Character</label>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">角色</label>
                     <div className="grid grid-cols-3 gap-1.5">
                         {['9:16', '16:9', '1:1'].map((ratio) => (
                             <button
@@ -171,7 +171,7 @@ function AssetsInspector({ project }: { project: any }) {
 
                 {/* Scene Aspect Ratio */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase">Scene</label>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">场景</label>
                     <div className="grid grid-cols-3 gap-1.5">
                         {['9:16', '16:9', '1:1'].map((ratio) => (
                             <button
@@ -190,7 +190,7 @@ function AssetsInspector({ project }: { project: any }) {
 
                 {/* Prop Aspect Ratio */}
                 <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-gray-500 uppercase">Prop</label>
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">道具</label>
                     <div className="grid grid-cols-3 gap-1.5">
                         {['9:16', '16:9', '1:1'].map((ratio) => (
                             <button
@@ -223,28 +223,28 @@ function ArtDirectionStyleDisplay({ project }: { project: any }) {
         <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
                 <Paintbrush className="text-primary" size={14} />
-                <h3 className="font-bold text-white text-xs">Art Direction Style</h3>
+                <h3 className="font-bold text-white text-xs">艺术风格</h3>
             </div>
 
             {artDirectionStyle ? (
                 <div className="space-y-3">
                     <div>
-                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Style Name</label>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">风格名称</label>
                         <div className="text-xs font-bold text-white bg-gradient-to-r from-blue-500/20 to-purple-500/20 p-2.5 rounded-lg border border-white/10">
                             {artDirectionStyle.name}
                         </div>
                     </div>
 
                     <div>
-                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Positive Prompt</label>
+                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">正向提示词</label>
                         <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 text-[10px] text-gray-400 leading-relaxed max-h-20 overflow-y-auto">
-                            {artDirectionStyle.positive_prompt || 'No positive prompt defined'}
+                            {artDirectionStyle.positive_prompt || '未设置正向提示词'}
                         </div>
                     </div>
 
                     {artDirectionStyle.negative_prompt && (
                         <div>
-                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Negative Prompt</label>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">负向提示词</label>
                             <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 text-[10px] text-gray-400 leading-relaxed max-h-16 overflow-y-auto">
                                 {artDirectionStyle.negative_prompt}
                             </div>
@@ -253,15 +253,15 @@ function ArtDirectionStyleDisplay({ project }: { project: any }) {
 
                     <div className="pt-2">
                         <p className="text-[9px] text-gray-500 leading-relaxed">
-                            💡 Tip: Edit style in Step 2 (Art Direction)
+                            💡 提示：在步骤 2（艺术方向）中编辑风格
                         </p>
                     </div>
                 </div>
             ) : (
                 <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
-                    <p className="text-xs text-gray-500 mb-2">No style configured</p>
+                    <p className="text-xs text-gray-500 mb-2">尚未配置风格</p>
                     <p className="text-[9px] text-gray-600">
-                        Go to Step 2 (Art Direction) to set up your project's visual style
+                        前往步骤 2（艺术方向）设置项目的视觉风格
                     </p>
                 </div>
             )}
@@ -412,15 +412,41 @@ function StoryboardInspector() {
         }
     };
 
+    const handleUpdateStoryboardAspectRatio = async (ratio: string) => {
+        if (!currentProject) return;
+        try {
+            const updated = await api.updateModelSettings(currentProject.id, undefined, undefined, undefined, undefined, undefined, undefined, ratio);
+            updateProject(currentProject.id, updated);
+        } catch (error) {
+            console.error('Failed to update storyboard aspect ratio:', error);
+        }
+    };
+
     if (!selectedFrame) {
         return (
             <div className="space-y-6">
-                <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center text-gray-500 text-xs">
-                    Select a frame to edit its details.
+                {/* Storyboard Aspect Ratio — always accessible */}
+                <div className="space-y-2 pb-4 border-b border-white/10">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">分镜宽高比</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {['9:16', '16:9', '1:1'].map((ratio) => (
+                            <button
+                                key={ratio}
+                                onClick={() => handleUpdateStoryboardAspectRatio(ratio)}
+                                className={`px-2 py-1.5 rounded text-[10px] border transition-all font-medium ${
+                                    (currentProject?.model_settings?.storyboard_aspect_ratio || '16:9') === ratio
+                                        ? 'bg-primary/20 text-primary border-primary/30'
+                                        : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                                }`}
+                            >
+                                {ratio}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <p className="text-xs text-gray-500 text-center">
-                    Tip: Use the ⚙️ icon in the sidebar to configure aspect ratios.
-                </p>
+                <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center text-gray-500 text-xs">
+                    选择一帧以编辑详情。
+                </div>
             </div>
         );
     }
@@ -429,16 +455,36 @@ function StoryboardInspector() {
         <div className="space-y-6">
             <div className="space-y-3">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Layout size={14} /> Frame Editor
+                    <Layout size={14} /> 分镜编辑
                 </h3>
                 <div className="text-xs text-gray-400">
-                    Editing Frame {currentProject?.frames?.findIndex((f: any) => f.id === selectedFrameId) + 1}
+                    正在编辑第 {currentProject?.frames?.findIndex((f: any) => f.id === selectedFrameId) + 1} 帧
+                </div>
+            </div>
+
+            {/* Storyboard Aspect Ratio */}
+            <div className="space-y-2 pb-4 border-b border-white/10">
+                <label className="text-[10px] font-bold text-gray-500 uppercase">分镜宽高比</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                    {['9:16', '16:9', '1:1'].map((ratio) => (
+                        <button
+                            key={ratio}
+                            onClick={() => handleUpdateStoryboardAspectRatio(ratio)}
+                            className={`px-2 py-1.5 rounded text-[10px] border transition-all font-medium ${
+                                (currentProject?.model_settings?.storyboard_aspect_ratio || '16:9') === ratio
+                                    ? 'bg-primary/20 text-primary border-primary/30'
+                                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                            }`}
+                        >
+                            {ratio}
+                        </button>
+                    ))}
                 </div>
             </div>
 
             {/* Action Description */}
             <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase">Action / Visuals</label>
+                <label className="text-xs font-bold text-gray-500 uppercase">动作 / 画面</label>
                 <textarea
                     className="w-full h-24 bg-black/20 border border-white/10 rounded-lg p-3 text-xs text-gray-300 resize-none focus:outline-none focus:border-primary/50"
                     value={selectedFrame.action_description || ""}
@@ -449,7 +495,7 @@ function StoryboardInspector() {
 
             {/* Dialogue */}
             <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase">Dialogue</label>
+                <label className="text-xs font-bold text-gray-500 uppercase">台词</label>
                 <textarea
                     className="w-full h-16 bg-black/20 border border-white/10 rounded-lg p-3 text-xs text-gray-300 resize-none focus:outline-none focus:border-primary/50"
                     value={selectedFrame.dialogue || ""}
@@ -481,7 +527,7 @@ function StoryboardInspector() {
                     return (
                         <>
                             <div className="flex justify-between items-center">
-                                <label className="text-xs font-bold text-gray-500 uppercase">Reference Assets</label>
+                                <label className="text-xs font-bold text-gray-500 uppercase">参考素材</label>
                                 <span className={`text-[10px] ${isLimitReached ? "text-yellow-500 font-bold" : "text-gray-500"}`}>
                                     {referenceCount}/{referenceLimit} Images
                                 </span>
@@ -489,7 +535,7 @@ function StoryboardInspector() {
 
                             {/* Scene Selector */}
                             <div className="mb-2 space-y-2">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase">Scene</label>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">场景</label>
                                 <select
                                     className="w-full bg-black/20 border border-white/10 rounded p-2 text-xs text-gray-300 focus:outline-none"
                                     value={selectedFrame.scene_id || ""}
@@ -531,7 +577,7 @@ function StoryboardInspector() {
 
                             {/* Character Toggles */}
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase">Characters</label>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase">角色</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {currentProject?.characters?.map((char: any) => {
                                         const isSelected = selectedFrame.character_ids?.includes(char.id);

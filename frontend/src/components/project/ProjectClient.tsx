@@ -36,15 +36,15 @@ export default function ProjectClient({ id, breadcrumbSegments }: { id: string; 
     };
 
     const steps = [
-        { id: "script", label: "1. Script", icon: BookOpen },
-        { id: "art_direction", label: "2. Art Direction", icon: Palette },
-        { id: "assets", label: "3. Assets", icon: Users },
-        { id: "storyboard", label: "4. Storyboard", icon: Layout },
-        { id: "motion", label: "5. Motion", icon: Video },
-        { id: "assembly", label: "6. Assembly", icon: Film },
-        { id: "audio", label: "7. Voice", icon: Mic, comingSoon: true },
-        { id: "mix", label: "8. Final Mix", icon: Music, comingSoon: true },
-        { id: "export", label: "9. Export", icon: Share2, comingSoon: true },
+        { id: "script", label: "1. 脚本", icon: BookOpen },
+        { id: "art_direction", label: "2. 艺术方向", icon: Palette },
+        { id: "assets", label: "3. 素材", icon: Users },
+        { id: "storyboard", label: "4. 分镜", icon: Layout },
+        { id: "motion", label: "5. 动效", icon: Video },
+        { id: "assembly", label: "6. 剪辑", icon: Film },
+        { id: "audio", label: "7. 配音", icon: Mic, comingSoon: true },
+        { id: "mix", label: "8. 混音", icon: Music, comingSoon: true },
+        { id: "export", label: "9. 导出", icon: Share2, comingSoon: true },
     ];
 
     useEffect(() => {

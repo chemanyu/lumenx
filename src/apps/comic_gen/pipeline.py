@@ -805,17 +805,17 @@ class ComicGenPipeline:
             logger.info(f"Added uploaded variant {new_variant.id} to character {asset_id} {upload_type}")
             
         elif asset_type in ["scene", "prop"]:
-            # Scene and Prop have a single 'image' asset unit
-            if not hasattr(target_asset, 'image') or target_asset.image is None:
-                target_asset.image = AssetUnit()
-            
-            target_asset.image.image_variants.append(new_variant)
-            target_asset.image.selected_image_id = new_variant.id
-            target_asset.image.image_updated_at = time.time()
-            
+            # Scene and Prop use image_asset field
+            if target_asset.image_asset is None:
+                from .models import ImageAsset
+                target_asset.image_asset = ImageAsset()
+
+            target_asset.image_asset.variants.append(new_variant)
+            target_asset.image_asset.selected_id = new_variant.id
+
             # Also update legacy image_url field
             target_asset.image_url = image_url
-            
+
             logger.info(f"Added uploaded variant {new_variant.id} to {asset_type} {asset_id}")
         
         self._save_data()
@@ -996,7 +996,8 @@ class ComicGenPipeline:
         if not script:
             raise ValueError("Script not found")
             
-        script = self.storyboard_generator.generate_storyboard(script)
+        i2i_model = script.model_settings.i2i_model
+        script = self.storyboard_generator.generate_storyboard(script, model_name=i2i_model)
         self._save_data()
         return script
 
@@ -1393,7 +1394,7 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "happyhorse-1.0-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "happyhorse-1.0-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None, ratio: str = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -1456,6 +1457,7 @@ class ComicGenPipeline:
             cfg_scale=cfg_scale,
             vidu_audio=vidu_audio,
             movement_amplitude=movement_amplitude,
+            ratio=ratio,
             created_at=time.time()
         )
         
@@ -2080,7 +2082,8 @@ class ComicGenPipeline:
                     shot_type=task.shot_type,
                     ref_video_urls=task.reference_video_urls if task.generation_mode == "r2v" else None,
                     camera_motion=None,
-                    subject_motion=None
+                    subject_motion=None,
+                    ratio=task.ratio,
                 )
             
             task.video_url = os.path.relpath(output_path, "output")

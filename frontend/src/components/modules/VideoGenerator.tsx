@@ -20,6 +20,7 @@ export default function VideoGenerator() {
     // Generation Params (Lifted State)
     const [params, setParams] = useState({
         resolution: "720p",
+        ratio: "16:9",
         duration: 5,
         seed: undefined as number | undefined,
         generateAudio: true,  // Default to AI Sound enabled

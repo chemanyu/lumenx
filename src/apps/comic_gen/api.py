@@ -1130,6 +1130,8 @@ class CreateVideoTaskRequest(BaseModel):
     # Vidu params
     vidu_audio: Optional[bool] = None
     movement_amplitude: Optional[str] = None
+    # HH ratio
+    ratio: Optional[str] = None
 
 
 async def process_video_task(script_id: str, task_id: str):
@@ -1167,6 +1169,7 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
                 cfg_scale=request.cfg_scale,
                 vidu_audio=request.vidu_audio,
                 movement_amplitude=request.movement_amplitude,
+                ratio=request.ratio,
             )
 
             # Find the created task object

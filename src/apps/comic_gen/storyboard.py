@@ -2,6 +2,7 @@ import os
 import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
+from .assets import ASPECT_RATIO_TO_SIZE
 from ...models.image import WanxImageModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
@@ -14,23 +15,25 @@ class StoryboardGenerator:
         self.model = WanxImageModel(self.config.get('model', {}))
         self.output_dir = self.config.get('output_dir', 'output/storyboard')
 
-    def generate_storyboard(self, script: Any) -> Any:
+    def generate_storyboard(self, script: Any, model_name: str = None) -> Any:
         """Generates images for all frames in the storyboard."""
         logger.info(f"Generating storyboard for script: {script.title}")
-        
+
+        aspect_ratio = getattr(getattr(script, 'model_settings', None), 'storyboard_aspect_ratio', '16:9')
+        size = ASPECT_RATIO_TO_SIZE.get(aspect_ratio, "1024*576")
+        logger.info(f"[Storyboard] Using aspect ratio {aspect_ratio} -> size {size}, model {model_name or 'default'}")
+
         total_frames = len(script.frames)
         for i, frame in enumerate(script.frames):
             logger.info(f"Generating frame {i+1}/{total_frames}: {frame.id}")
-            
-            # Skip if already completed (unless force regeneration is needed, but for now we skip)
+
             if frame.status == GenerationStatus.COMPLETED and frame.image_url:
                 continue
-                
-            # Find scene for this frame
+
             scene = next((s for s in script.scenes if s.id == frame.scene_id), None)
-            
-            self.generate_frame(frame, script.characters, scene)
-            
+
+            self.generate_frame(frame, script.characters, scene, size=size, model_name=model_name)
+
         return script
 
     def generate_frame(self, frame: StoryboardFrame, characters: List[Character], scene: Scene, ref_image_path: str = None, ref_image_paths: List[str] = None, prompt: str = None, batch_size: int = 1, size: str = None, model_name: str = None) -> StoryboardFrame:

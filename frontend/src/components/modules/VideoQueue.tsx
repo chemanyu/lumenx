@@ -104,6 +104,10 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                                 alt="Input"
                                 className="w-full h-full object-cover opacity-60"
                             />
+                        ) : task.generation_mode === 't2v' ? (
+                            <div className="w-full h-full flex items-center justify-center bg-green-900/30 text-green-400 text-[10px] font-bold">
+                                T2V
+                            </div>
                         ) : (
                             <div className="w-full h-full flex items-center justify-center bg-purple-900/30 text-purple-400 text-[10px] font-bold">
                                 R2V
@@ -164,6 +168,10 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            ) : task.generation_mode === 't2v' ? (
+                                <div className="w-full h-full flex items-center justify-center bg-green-900/10 text-green-400/50 text-xs font-bold">
+                                    T2V
                                 </div>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-purple-900/10 text-purple-400/50 text-xs font-bold">

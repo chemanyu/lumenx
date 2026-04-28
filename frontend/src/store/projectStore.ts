@@ -173,6 +173,8 @@ export interface ModelParamSupport {
     movementAmplitude?: { options: string[]; default: string };
     // HappyHorse T2V: model does not require an input image
     t2vOnly?: boolean;
+    // HappyHorse ratio support
+    ratio?: { options: string[]; default: string };
 }
 
 export interface I2VModelConfig {
@@ -213,6 +215,7 @@ const VIDU_PARAMS: ModelParamSupport = {
 
 const HH_PARAMS: ModelParamSupport = {
     resolution: { options: ['720P', '1080P'], default: '1080P' },
+    ratio: { options: ['16:9', '9:16', '1:1', '4:3', '3:4'], default: '16:9' },
     seed: true,
 };
 
@@ -247,6 +250,7 @@ export const ASPECT_RATIOS = [
 
 export interface VideoParams {
     resolution: string;
+    ratio: string;
     duration: number;
     seed: number | undefined;
     generateAudio: boolean;

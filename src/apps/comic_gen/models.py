@@ -107,6 +107,7 @@ class VideoTask(BaseModel):
     # Vidu params
     vidu_audio: Optional[bool] = Field(None, description="Vidu audio output")
     movement_amplitude: Optional[str] = Field(None, description="Vidu movement amplitude: auto/small/medium/large")
+    ratio: Optional[str] = Field(None, description="HH video aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4")
     created_at: float = Field(default_factory=time.time)
 
 class Character(BaseModel):

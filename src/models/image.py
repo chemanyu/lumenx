@@ -102,8 +102,12 @@ class WanxImageModel(ImageGenModel):
             if final_model_name == 'wan2.6-t2i':
                 image_url = self._generate_wan26_http(prompt, size, n, negative_prompt)
             elif final_model_name == 'wan2.6-image':
-                # wan2.6-image for I2I (requires reference images)
-                image_url = self._generate_wan26_image_http(prompt, size, n, negative_prompt, all_ref_paths)
+                # wan2.6-image requires reference images; fall back to wan2.6-t2i if none provided
+                if not all_ref_paths:
+                    logger.warning("wan2.6-image selected but no reference images available, falling back to wan2.6-t2i")
+                    image_url = self._generate_wan26_http(prompt, size, n, negative_prompt)
+                else:
+                    image_url = self._generate_wan26_image_http(prompt, size, n, negative_prompt, all_ref_paths)
             else:
                 # Use SDK for other models
                 image_url = self._generate_sdk(prompt, final_model_name, size, n, negative_prompt, all_ref_paths,
@@ -218,7 +222,8 @@ class WanxImageModel(ImageGenModel):
                 if image_input:
                     content.append({"image": image_input})
 
-        if ref_image_paths and not content:
+        if not content or (len(content) == 1 and 'text' in content[0]):
+            # ref_image_paths were provided but all failed to resolve
             raise RuntimeError(
                 "Wan 2.6 Image requires at least one usable reference image. "
                 "Please provide a valid local image, public URL, or configure OSS."

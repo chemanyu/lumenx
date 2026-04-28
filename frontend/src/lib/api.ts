@@ -126,7 +126,9 @@ export const api = {
         cfgScale?: number,
         // Vidu params
         viduAudio?: boolean,
-        movementAmplitude?: string
+        movementAmplitude?: string,
+        // HH ratio
+        ratio?: string
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -150,7 +152,9 @@ export const api = {
             cfg_scale: cfgScale,
             // Vidu
             vidu_audio: viduAudio,
-            movement_amplitude: movementAmplitude
+            movement_amplitude: movementAmplitude,
+            // HH ratio
+            ratio
         });
         return res.data;
     },
