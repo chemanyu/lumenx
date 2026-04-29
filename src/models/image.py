@@ -69,11 +69,11 @@ class WanxImageModel(ImageGenModel):
         if model_name:
             final_model_name = model_name
         elif all_ref_paths:
-            # For I2I, use i2i_model_name if configured, otherwise default to wan2.5-i2i-preview
-            final_model_name = self.params.get('i2i_model_name', 'wan2.5-i2i-preview')
+            # For I2I, use i2i_model_name if configured, otherwise default to wan2.7-image-pro
+            final_model_name = self.params.get('i2i_model_name', 'wan2.7-image-pro')
         else:
-            # For T2I, use model_name if configured, otherwise default to wan2.6-t2i
-            final_model_name = self.params.get('model_name', 'wan2.6-t2i')
+            # For T2I, use model_name if configured, otherwise default to wan2.7-image-pro
+            final_model_name = self.params.get('model_name', 'wan2.7-image-pro')
 
         if all_ref_paths:
             logger.info(f"Using I2I model: {final_model_name} with {len(all_ref_paths)} reference images")
@@ -87,19 +87,26 @@ class WanxImageModel(ImageGenModel):
         kwargs.pop('model_name', None)
         
         # Determine reference image limit based on model
-        ref_limit = 4 if final_model_name == 'wan2.6-image' else 3
+        if final_model_name.startswith('wan2.7-'):
+            ref_limit = 9  # wan2.7 supports up to 9 images
+        elif final_model_name == 'wan2.6-image':
+            ref_limit = 4
+        else:
+            ref_limit = 3
         if len(all_ref_paths) > ref_limit:
             logger.warning(f"Limiting reference images from {len(all_ref_paths)} to {ref_limit} for model {final_model_name}")
             all_ref_paths = all_ref_paths[:ref_limit]
-        
+
         logger.info(f"Starting image generation...")
         logger.info(f"Prompt: {prompt}")
         logger.info(f"Model: {final_model_name}, Size: {size}, N: {n}")
 
         try:
             api_start_time = time.time()
-            # Use HTTP API for wan2.6 models (SDK not supported yet)
-            if final_model_name == 'wan2.6-t2i':
+            # wan2.7 handles both T2I and I2I through the same unified API
+            if final_model_name.startswith('wan2.7-'):
+                image_url = self._generate_wan27_http(prompt, final_model_name, size, n, negative_prompt, all_ref_paths)
+            elif final_model_name == 'wan2.6-t2i':
                 image_url = self._generate_wan26_http(prompt, size, n, negative_prompt)
             elif final_model_name == 'wan2.6-image':
                 # wan2.6-image requires reference images; fall back to wan2.6-t2i if none provided
@@ -128,6 +135,160 @@ class WanxImageModel(ImageGenModel):
             logger.error(f"Error during generation: {e}")
             logger.error(traceback.format_exc())
             raise
+
+    def _map_size_to_wan27(self, size: str) -> str:
+        """Map pixel size string to wan2.7 resolution spec (1K/2K/4K)."""
+        if not size:
+            return "2K"
+        s = size.upper()
+        if s in ("1K", "2K", "4K"):
+            return s
+        # Parse pixel dimensions like "1280*1280" or "1024*1024"
+        try:
+            parts = size.replace("x", "*").split("*")
+            w, h = int(parts[0]), int(parts[1])
+            total = w * h
+            if total <= 1024 * 1024:
+                return "1K"
+            elif total <= 2048 * 2048:
+                return "2K"
+            else:
+                return "4K"
+        except Exception:
+            return "2K"
+
+    def _generate_wan27_http(self, prompt: str, model_name: str, size: str, n: int,
+                             negative_prompt: str = None, ref_image_paths: list = None) -> str:
+        """Generate image using Wan 2.7 via HTTP API.
+
+        T2I (no images): synchronous multimodal-generation endpoint.
+        I2I (with images): asynchronous image-generation endpoint with polling.
+        """
+        base = get_provider_base_url("DASHSCOPE")
+        wan27_size = self._map_size_to_wan27(size)
+
+        # Build content array
+        content = []
+        if ref_image_paths:
+            for path in ref_image_paths:
+                image_input = self._resolve_wan26_reference_image(path, model_name=model_name)
+                if image_input:
+                    content.append({"image": image_input})
+        content.append({"text": prompt})
+
+        has_images = bool(ref_image_paths and any(item.get("image") for item in content))
+
+        payload = {
+            "model": model_name,
+            "input": {
+                "messages": [
+                    {"role": "user", "content": content}
+                ]
+            },
+            "parameters": {
+                "size": wan27_size,
+                "n": n,
+                "watermark": False,
+            },
+        }
+        # thinking_mode only works for T2I (no image input, not sequential)
+        if not has_images:
+            payload["parameters"]["thinking_mode"] = True
+
+        if has_images:
+            # Asynchronous path for I2I (image editing)
+            create_url = f"{base}/api/v1/services/aigc/image-generation/generation"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "X-DashScope-Async": "enable",
+            }
+            logger.info(f"Calling Wan 2.7 I2I HTTP API (async) model={model_name}...")
+            logger.info(f"Payload: {payload}")
+
+            response = requests.post(create_url, headers=headers, json=payload, timeout=120)
+            logger.info(f"Create task response: {response.status_code} {response.text[:300]}")
+
+            if response.status_code != 200:
+                error_data = response.json() if response.text else {}
+                raise RuntimeError(f"Wan 2.7 I2I task creation failed: {error_data.get('message', response.text)}")
+
+            result = response.json()
+            task_id = result.get("output", {}).get("task_id")
+            if not task_id:
+                raise RuntimeError(f"No task_id in response: {result}")
+
+            logger.info(f"Task created: {task_id}")
+            return self._poll_wan27_task(task_id)
+        else:
+            # Synchronous path for T2I
+            url = f"{base}/api/v1/services/aigc/multimodal-generation/generation"
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            }
+            logger.info(f"Calling Wan 2.7 T2I HTTP API (sync) model={model_name}...")
+            logger.info(f"Payload: {payload}")
+
+            response = requests.post(url, headers=headers, json=payload, timeout=300)
+            logger.info(f"Response: {response.status_code} {response.text[:300]}...")
+
+            if response.status_code != 200:
+                error_data = response.json() if response.text else {}
+                raise RuntimeError(f"Wan 2.7 T2I API failed: {error_data.get('message', response.text)}")
+
+            result = response.json()
+            return self._extract_image_url_from_choices(result, "Wan 2.7 T2I")
+
+    def _poll_wan27_task(self, task_id: str, max_wait_time: int = 600, poll_interval: int = 10) -> str:
+        """Poll a wan2.7 async image task and return the image URL."""
+        base = get_provider_base_url("DASHSCOPE")
+        poll_url = f"{base}/api/v1/tasks/{task_id}"
+        poll_headers = {"Authorization": f"Bearer {self.api_key}"}
+        elapsed = 0
+
+        while elapsed < max_wait_time:
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+            poll_response = requests.get(poll_url, headers=poll_headers, timeout=30)
+            if poll_response.status_code != 200:
+                logger.warning(f"Poll request failed: {poll_response.status_code}")
+                continue
+
+            poll_result = poll_response.json()
+            task_status = poll_result.get("output", {}).get("task_status")
+            logger.info(f"Task {task_id} status: {task_status} (elapsed: {elapsed}s)")
+
+            if task_status == "SUCCEEDED":
+                return self._extract_image_url_from_choices(poll_result, "Wan 2.7 I2I")
+            elif task_status == "FAILED":
+                error_msg = (
+                    poll_result.get("output", {}).get("message", "") or
+                    poll_result.get("output", {}).get("code", "") or
+                    poll_result.get("message", "") or
+                    "Unknown error"
+                )
+                raise RuntimeError(f"Wan 2.7 I2I task failed: {error_msg}")
+            elif task_status in ("CANCELED", "UNKNOWN"):
+                raise RuntimeError(f"Wan 2.7 I2I task {task_status}: {poll_result}")
+
+        raise RuntimeError(f"Wan 2.7 I2I task timed out after {max_wait_time}s")
+
+    def _extract_image_url_from_choices(self, result: dict, label: str) -> str:
+        """Extract image URL from choices[].message.content[].image response structure."""
+        choices = result.get("output", {}).get("choices", [])
+        if not choices:
+            raise RuntimeError(f"No choices in {label} response: {result}")
+        content = choices[0].get("message", {}).get("content", [])
+        if not content:
+            raise RuntimeError(f"No content in {label} choice: {choices[0]}")
+        for item in content:
+            if item.get("type") == "image" or item.get("image"):
+                image_url = item.get("image")
+                if image_url:
+                    return image_url
+        raise RuntimeError(f"No image URL found in {label} content: {content}")
 
     def _generate_wan26_http(self, prompt: str, size: str, n: int, negative_prompt: str = None) -> str:
         """Generate image using Wan 2.6 T2I via HTTP API (synchronous)."""

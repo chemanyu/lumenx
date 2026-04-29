@@ -133,12 +133,12 @@ class AssetGenerator:
                         fullbody_path = os.path.join(self.output_dir, 'characters', f"{character.id}_fullbody_{variant_id}.png")
                         os.makedirs(os.path.dirname(fullbody_path), exist_ok=True)
                         
-                        # Select model: use I2I model (wan2.6-image) when reference image is provided
+                        # Select model: use I2I model when reference image is provided
                         effective_model_name = model_name
                         effective_generation_prompt = generation_prompt
                         if ref_image_path:
                             # Override to I2I model when using reference image
-                            effective_model_name = i2i_model_name or "wan2.6-image"
+                            effective_model_name = i2i_model_name or "wan2.7-image-pro"
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)

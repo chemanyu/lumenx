@@ -253,8 +253,8 @@ class StoryboardFrame(BaseModel):
 
 class ModelSettings(BaseModel):
     """Model selection settings for different generation stages"""
-    t2i_model: str = Field("wan2.6-t2i", description="Text-to-Image model for Assets")
-    i2i_model: str = Field("wan2.6-image", description="Image-to-Image model for Storyboard")
+    t2i_model: str = Field("wan2.7-image-pro", description="Text-to-Image model for Assets")
+    i2i_model: str = Field("wan2.7-image-pro", description="Image-to-Image model for Storyboard")
     i2v_model: str = Field("happyhorse-1.0-i2v", description="Image-to-Video model for Motion")
     character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
     scene_aspect_ratio: str = Field("16:9", description="Aspect ratio for Scenes (9:16, 16:9, 1:1)")

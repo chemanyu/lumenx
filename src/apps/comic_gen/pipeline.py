@@ -400,7 +400,7 @@ class ComicGenPipeline:
         asset_type = task["asset_type"]
         positive_prompt = params.get("effective_positive_prompt", "")
         negative_prompt = params.get("effective_negative_prompt", "")
-        t2i_model = params.get("t2i_model", "wan2.6-t2i")
+        t2i_model = params.get("t2i_model", "wan2.7-image-pro")
         effective_size = params.get("effective_size", "576*1024")
         batch_size = params.get("batch_size", 1)
         generation_type = params.get("generation_type", "all")

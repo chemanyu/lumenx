@@ -146,6 +146,17 @@ DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
         },
     ),
     ProviderFamilyConfig(
+        model_family="wan2.7-",
+        backend_default="dashscope",
+        credential_sources={
+            "dashscope": ("DASHSCOPE_API_KEY",),
+        },
+        supported_modalities=("t2i", "i2i"),
+        image_input_mode={
+            "dashscope": "dashscope_multimodal_message",
+        },
+    ),
+    ProviderFamilyConfig(
         model_family="happyhorse-",
         backend_default="dashscope",
         credential_sources={
