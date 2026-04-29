@@ -759,6 +759,59 @@ class WanxModel(VideoGenModel):
         logger.info(f"[HH] Task created: {task_id}")
         return self._poll_dashscope_task(task_id, model_name)
 
+    def _generate_hh_video_edit_http(
+        self,
+        prompt: str,
+        video_url: str,
+        reference_image_urls: list = None,
+        model_name: str = "happyhorse-1.0-video-edit",
+        resolution: str = "1080P",
+        watermark: bool = False,
+        audio_setting: str = "auto",
+        seed: int = None,
+    ) -> str:
+        """Submit a video-edit task and return the resulting video URL."""
+        base = get_provider_base_url("DASHSCOPE")
+        create_url = f"{base}/api/v1/services/aigc/video-generation/video-synthesis"
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "X-DashScope-Async": "enable",
+        }
+
+        media = [{"type": "video", "url": video_url}]
+        for ref_url in (reference_image_urls or []):
+            media.append({"type": "reference_image", "url": ref_url})
+
+        payload = {
+            "model": model_name,
+            "input": {"prompt": prompt, "media": media},
+            "parameters": {
+                "resolution": resolution.upper(),
+                "watermark": watermark,
+                "audio_setting": audio_setting,
+            },
+        }
+        if seed is not None:
+            payload["parameters"]["seed"] = seed
+
+        logger.info(f"[HH-Edit] Submitting video-edit task, video_url={video_url}")
+        response = requests.post(create_url, headers=headers, json=payload, timeout=120)
+        logger.info(f"[HH-Edit] Create task response: {response.status_code} {response.text[:300]}")
+
+        if response.status_code != 200:
+            error_data = response.json() if response.text else {}
+            raise RuntimeError(f"[HH-Edit] Task creation failed: {error_data.get('message', response.text)}")
+
+        result = response.json()
+        task_id = result.get("output", {}).get("task_id")
+        if not task_id:
+            raise RuntimeError(f"[HH-Edit] No task_id in response: {result}")
+
+        logger.info(f"[HH-Edit] Task created: {task_id}")
+        return task_id
+
     def _generate_sdk(self, prompt: str, model_name: str, img_url: str = None, size: str = "1280*720",
                       duration: int = 5, prompt_extend: bool = True, negative_prompt: str = None,
                       audio_url: str = None, watermark: bool = False, seed: int = None,

@@ -2148,5 +2148,174 @@ async def delete_prop(script_id: str, prop_id: str):
     return signed_response(script)
 
 
+# ── Video Editor (HappyHorse video-edit) ───────────────────────────────────────
+
+@protected_router.post("/video-edit/upload")
+async def upload_video_for_edit(file: UploadFile = File(...)):
+    """Upload a video file to OSS and return a signed public URL for use with the video-edit API."""
+    uploader = OSSImageUploader()
+    if not uploader.is_configured:
+        raise HTTPException(status_code=400, detail="OSS 未配置，无法上传视频。请先在设置中填写 OSS 相关环境变量。")
+
+    allowed_exts = {".mp4", ".mov"}
+    file_ext = os.path.splitext(file.filename or "")[1].lower()
+    if file_ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"仅支持 MP4/MOV 格式，当前文件扩展名：{file_ext}")
+
+    try:
+        filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join("output/uploads", filename)
+        os.makedirs("output/uploads", exist_ok=True)
+
+        with open(file_path, "wb") as buf:
+            shutil.copyfileobj(file.file, buf)
+
+        object_key = uploader.upload_file(file_path, sub_path="video-edit/videos")
+        if not object_key:
+            raise RuntimeError("OSS 上传失败，请检查 OSS 配置和权限。")
+
+        signed_url = uploader.sign_url_for_api(object_key)
+        if not signed_url:
+            raise RuntimeError("生成签名 URL 失败，请检查 OSS RAM 权限。")
+
+        return {"url": signed_url, "object_key": object_key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Video upload failed")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up local temp file
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
+@protected_router.post("/video-edit/upload-image")
+async def upload_image_for_edit(file: UploadFile = File(...)):
+    """Upload a reference image to OSS and return a signed public URL."""
+    uploader = OSSImageUploader()
+    if not uploader.is_configured:
+        raise HTTPException(status_code=400, detail="OSS 未配置，无法上传图片。请先在设置中填写 OSS 相关环境变量。")
+
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp"}
+    file_ext = os.path.splitext(file.filename or "")[1].lower()
+    if file_ext not in allowed_exts:
+        raise HTTPException(status_code=400, detail=f"仅支持 JPEG/PNG/WEBP 格式，当前扩展名：{file_ext}")
+
+    file_path = None
+    try:
+        filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join("output/uploads", filename)
+        os.makedirs("output/uploads", exist_ok=True)
+
+        with open(file_path, "wb") as buf:
+            shutil.copyfileobj(file.file, buf)
+
+        object_key = uploader.upload_file(file_path, sub_path="video-edit/images")
+        if not object_key:
+            raise RuntimeError("OSS 上传失败，请检查 OSS 配置和权限。")
+
+        signed_url = uploader.sign_url_for_api(object_key)
+        if not signed_url:
+            raise RuntimeError("生成签名 URL 失败，请检查 OSS RAM 权限。")
+
+        return {"url": signed_url, "object_key": object_key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Image upload failed")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
+
+class VideoEditCreateRequest(BaseModel):
+    prompt: str
+    video_url: str
+    reference_image_urls: Optional[List[str]] = []
+    resolution: str = "1080P"
+    watermark: bool = False
+    audio_setting: str = "auto"
+    seed: Optional[int] = None
+
+
+class VideoEditTaskStatusResponse(BaseModel):
+    task_id: str
+    task_status: str
+    video_url: Optional[str] = None
+    orig_prompt: Optional[str] = None
+    code: Optional[str] = None
+    message: Optional[str] = None
+
+
+@protected_router.post("/video-edit/tasks")
+async def create_video_edit_task(request: VideoEditCreateRequest):
+    """Submit a HappyHorse video-edit task; returns task_id immediately."""
+    import os, requests as _requests
+    from ...models.wanx import WanxModel
+    from ...utils.endpoints import get_provider_base_url
+
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="DASHSCOPE_API_KEY not configured")
+
+    model = WanxModel({"params": {}})
+    try:
+        task_id = model._generate_hh_video_edit_http(
+            prompt=request.prompt,
+            video_url=request.video_url,
+            reference_image_urls=request.reference_image_urls,
+            resolution=request.resolution,
+            watermark=request.watermark,
+            audio_setting=request.audio_setting,
+            seed=request.seed,
+        )
+        return {"task_id": task_id, "task_status": "PENDING"}
+    except Exception as e:
+        logger.exception("Video edit task creation failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@protected_router.get("/video-edit/tasks/{task_id}", response_model=VideoEditTaskStatusResponse)
+async def get_video_edit_task(task_id: str):
+    """Poll a HappyHorse video-edit task status."""
+    import os, requests as _requests
+    from ...utils.endpoints import get_provider_base_url
+
+    api_key = os.getenv("DASHSCOPE_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="DASHSCOPE_API_KEY not configured")
+
+    base = get_provider_base_url("DASHSCOPE")
+    poll_url = f"{base}/api/v1/tasks/{task_id}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    try:
+        resp = _requests.get(poll_url, headers=headers, timeout=30)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+        data = resp.json()
+        output = data.get("output", {})
+        return VideoEditTaskStatusResponse(
+            task_id=task_id,
+            task_status=output.get("task_status", "UNKNOWN"),
+            video_url=output.get("video_url"),
+            orig_prompt=output.get("orig_prompt"),
+            code=output.get("code"),
+            message=output.get("message"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Video edit task query failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Register protected routes
 app.include_router(protected_router)

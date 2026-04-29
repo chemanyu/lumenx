@@ -20,6 +20,7 @@ const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDia
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const LoginPage = dynamic(() => import("@/app/login/page"), { ssr: false });
+const VideoEditor = dynamic(() => import("@/components/modules/VideoEditor"), { ssr: false });
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -318,7 +319,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'login'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'login' | 'video-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
@@ -449,6 +450,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/video-editor') {
+        setCurrentView('video-editor');
+        setActiveTab('video-editor');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       if (hash.startsWith('#/login')) {
         setCurrentView('login');
         setProjectId(null);
@@ -512,6 +521,9 @@ export default function Home() {
     }
     if (currentView === 'settings') {
       return <SettingsPage />;
+    }
+    if (currentView === 'video-editor') {
+      return <VideoEditor />;
     }
 
     // Workspace view
