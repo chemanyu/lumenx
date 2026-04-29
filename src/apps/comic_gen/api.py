@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -12,6 +12,7 @@ import shutil
 import uuid
 import logging
 import traceback
+import urllib.parse
 from .pipeline import ComicGenPipeline
 from .models import (
     PromptConfig,
@@ -24,8 +25,17 @@ from .models import (
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils import setup_logging
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from dotenv import load_dotenv, set_key
+from .auth import (
+    DINGTALK_CLIENT_ID,
+    create_oauth_state,
+    consume_oauth_state,
+    exchange_code_for_token,
+    get_dingtalk_user_info,
+    create_jwt,
+    require_auth,
+)
 
 app = FastAPI(title="AI Comic Gen API")
 logger = logging.getLogger(__name__)
@@ -78,6 +88,53 @@ app.mount("/files", StaticFiles(directory="output"), name="files")
 
 # Initialize pipeline
 pipeline = ComicGenPipeline()
+
+# ── Auth Routes (public) ──────────────────────────────────────────
+
+@app.get("/auth/login")
+async def auth_login(request: Request, frontend_origin: Optional[str] = None):
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "127.0.0.1:17177")
+    proto = request.headers.get("x-forwarded-proto", "http")
+    backend_base = f"{proto}://{host}"
+    # 前端告知自己的地址；未传则默认与后端同源（打包/PyWebView 模式）
+    frontend_base = frontend_origin or backend_base
+    state = create_oauth_state(backend_base, frontend_base)
+    redirect_uri = f"{backend_base}/auth/callback"
+    params = urllib.parse.urlencode({
+        "client_id": DINGTALK_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid",
+        "prompt": "consent",
+        "state": state,
+    })
+    return {"url": f"https://login.dingtalk.com/oauth2/auth?{params}", "state": state}
+
+
+@app.get("/auth/callback")
+async def auth_callback(code: str, state: str):
+    result = consume_oauth_state(state)
+    if not result:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+    backend_base, frontend_base = result
+    try:
+        token_data = exchange_code_for_token(code)
+        user_info = get_dingtalk_user_info(token_data["accessToken"])
+        jwt_token = create_jwt(user_info)
+    except Exception:
+        logger.exception("DingTalk OAuth callback failed")
+        return RedirectResponse(url=f"{frontend_base}/#/login?error=auth_failed")
+    return RedirectResponse(url=f"{frontend_base}/#/login?token={jwt_token}")
+
+
+@app.get("/auth/me")
+async def auth_me(current_user: dict = Depends(require_auth)):
+    return current_user
+
+
+# ── Protected Router (all business routes require auth) ──────────
+protected_router = APIRouter(dependencies=[Depends(require_auth)])
+
 
 @app.get("/debug/config")
 async def debug_config():
@@ -166,7 +223,7 @@ async def check_system():
 
 
 
-@app.post("/upload")
+@protected_router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     """Uploads a file and returns its URL (OSS if configured, else local)."""
     try:
@@ -193,7 +250,7 @@ class UploadAssetRequest(BaseModel):
     description: Optional[str] = None  # User-modified description for reverse generation
 
 
-@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/upload")
+@protected_router.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/upload")
 async def upload_asset(
     script_id: str,
     asset_type: str,
@@ -252,7 +309,7 @@ class CreateProjectRequest(BaseModel):
     text: str
 
 
-@app.post("/projects", response_model=Script)
+@protected_router.post("/projects", response_model=Script)
 async def create_project(request: CreateProjectRequest, skip_analysis: bool = False):
     """Creates a new project from a novel text."""
     # Run in thread pool to avoid blocking event loop during LLM analysis (Python 3.8 compatible)
@@ -269,7 +326,7 @@ class ReparseProjectRequest(BaseModel):
     text: str
 
 
-@app.put("/projects/{script_id}/reparse", response_model=Script)
+@protected_router.put("/projects/{script_id}/reparse", response_model=Script)
 async def reparse_project(script_id: str, request: ReparseProjectRequest):
     """Re-parses the text for an existing project, replacing all entities."""
     try:
@@ -287,7 +344,7 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
 
 
 
-@app.get("/projects/", response_model=List[dict])
+@protected_router.get("/projects/", response_model=List[dict])
 async def list_projects():
     """Lists all projects from backend storage."""
     scripts = list(pipeline.scripts.values())
@@ -308,21 +365,21 @@ class UpdateSeriesRequest(BaseModel):
     description: Optional[str] = None
 
 
-@app.post("/series")
+@protected_router.post("/series")
 async def create_series(request: CreateSeriesRequest):
     """Create a new Series."""
     series = pipeline.create_series(request.title, request.description)
     return signed_response(series)
 
 
-@app.get("/series")
+@protected_router.get("/series")
 async def list_series():
     """List all Series."""
     series_list = pipeline.list_series()
     return signed_response(series_list)
 
 
-@app.get("/series/{series_id}")
+@protected_router.get("/series/{series_id}")
 async def get_series(series_id: str):
     """Get Series details including assets and episode list."""
     series = pipeline.get_series(series_id)
@@ -344,7 +401,7 @@ async def get_series(series_id: str):
     return signed_response(result)
 
 
-@app.put("/series/{series_id}")
+@protected_router.put("/series/{series_id}")
 async def update_series(series_id: str, request: UpdateSeriesRequest):
     """Update Series title/description."""
     try:
@@ -355,7 +412,7 @@ async def update_series(series_id: str, request: UpdateSeriesRequest):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.delete("/series/{series_id}")
+@protected_router.delete("/series/{series_id}")
 async def delete_series(series_id: str):
     """Delete a Series and disassociate its episodes."""
     try:
@@ -370,7 +427,7 @@ class AddEpisodeRequest(BaseModel):
     episode_number: Optional[int] = None
 
 
-@app.post("/series/{series_id}/episodes")
+@protected_router.post("/series/{series_id}/episodes")
 async def add_episode_to_series(series_id: str, request: AddEpisodeRequest):
     """Add an existing project as an episode to a Series."""
     try:
@@ -380,7 +437,7 @@ async def add_episode_to_series(series_id: str, request: AddEpisodeRequest):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.delete("/series/{series_id}/episodes/{script_id}")
+@protected_router.delete("/series/{series_id}/episodes/{script_id}")
 async def remove_episode_from_series(series_id: str, script_id: str):
     """Remove an episode from a Series (does not delete the project)."""
     try:
@@ -390,7 +447,7 @@ async def remove_episode_from_series(series_id: str, script_id: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/series/{series_id}/episodes")
+@protected_router.get("/series/{series_id}/episodes")
 async def get_series_episodes(series_id: str):
     """Get all episodes in a Series."""
     try:
@@ -400,7 +457,7 @@ async def get_series_episodes(series_id: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/series/{series_id}/prompt_config")
+@protected_router.get("/series/{series_id}/prompt_config")
 async def get_series_prompt_config(series_id: str):
     """Get Series prompt config with system defaults."""
     series = pipeline.get_series(series_id)
@@ -416,7 +473,7 @@ async def get_series_prompt_config(series_id: str):
     }
 
 
-@app.put("/series/{series_id}/prompt_config")
+@protected_router.put("/series/{series_id}/prompt_config")
 async def update_series_prompt_config(series_id: str, config: PromptConfig):
     """Update Series-level prompt config."""
     try:
@@ -439,7 +496,7 @@ class UpdateModelSettingsRequest(BaseModel):
     prop_aspect_ratio: Optional[str] = None
     storyboard_aspect_ratio: Optional[str] = None
 
-@app.get("/series/{series_id}/model_settings")
+@protected_router.get("/series/{series_id}/model_settings")
 async def get_series_model_settings(series_id: str):
     """Get Series model settings."""
     series = pipeline.get_series(series_id)
@@ -448,7 +505,7 @@ async def get_series_model_settings(series_id: str):
     return series.model_settings.model_dump()
 
 
-@app.put("/series/{series_id}/model_settings")
+@protected_router.put("/series/{series_id}/model_settings")
 async def update_series_model_settings(series_id: str, settings: UpdateModelSettingsRequest):
     """Update Series-level model settings."""
     updates = {k: v for k, v in settings.model_dump().items() if v is not None}
@@ -472,7 +529,7 @@ async def update_series_model_settings(series_id: str, settings: UpdateModelSett
 # Series Asset Operations
 # ============================================================
 
-@app.get("/series/{series_id}/assets")
+@protected_router.get("/series/{series_id}/assets")
 async def get_series_assets(series_id: str):
     """Get all shared assets from a Series."""
     series = pipeline.get_series(series_id)
@@ -485,7 +542,7 @@ async def get_series_assets(series_id: str):
     })
 
 
-@app.post("/series/{series_id}/assets/generate")
+@protected_router.post("/series/{series_id}/assets/generate")
 async def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
     try:
@@ -513,7 +570,7 @@ async def generate_series_asset(series_id: str, request: GenerateAssetRequest, b
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/series/{series_id}/assets/toggle_lock")
+@protected_router.post("/series/{series_id}/assets/toggle_lock")
 async def toggle_series_asset_lock(series_id: str, request: ToggleLockRequest):
     """Toggle the locked status of a Series asset."""
     try:
@@ -525,7 +582,7 @@ async def toggle_series_asset_lock(series_id: str, request: ToggleLockRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/series/{series_id}/assets/update_image")
+@protected_router.post("/series/{series_id}/assets/update_image")
 async def update_series_asset_image(series_id: str, request: UpdateAssetImageRequest):
     """Update a Series asset's image URL."""
     try:
@@ -537,7 +594,7 @@ async def update_series_asset_image(series_id: str, request: UpdateAssetImageReq
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/series/{series_id}/assets/update_attributes")
+@protected_router.post("/series/{series_id}/assets/update_attributes")
 async def update_series_asset_attributes(series_id: str, request: UpdateAssetAttributesRequest):
     """Update arbitrary attributes of a Series asset."""
     try:
@@ -556,7 +613,7 @@ class ImportAssetsRequest(BaseModel):
     asset_ids: List[str]
 
 
-@app.post("/series/{series_id}/assets/import")
+@protected_router.post("/series/{series_id}/assets/import")
 async def import_series_assets(series_id: str, request: ImportAssetsRequest):
     """Deep-copy assets from another Series into this one."""
     try:
@@ -572,7 +629,7 @@ async def import_series_assets(series_id: str, request: ImportAssetsRequest):
 # File Import & Episode Splitting
 # ============================================================
 
-@app.post("/series/import/preview")
+@protected_router.post("/series/import/preview")
 async def import_file_preview(
     file: UploadFile = File(...),
     suggested_episodes: int = 3,
@@ -616,7 +673,7 @@ class ConfirmImportRequest(BaseModel):
     episodes: List[Dict[str, Any]]  # episode_number, title, start_marker, end_marker, ...
 
 
-@app.post("/series/import/confirm")
+@protected_router.post("/series/import/confirm")
 async def import_file_confirm(request: ConfirmImportRequest):
     """Confirm the episode split and create Series + Episodes."""
     try:
@@ -767,7 +824,7 @@ load_user_config()
 
 
 
-@app.get("/config/info")
+@protected_router.get("/config/info")
 async def get_config_info():
     """Returns information about the current config storage mode."""
     config_path = get_user_config_path()
@@ -779,7 +836,7 @@ async def get_config_info():
     }
 
 
-@app.post("/config/env")
+@protected_router.post("/config/env")
 async def update_env_config(config: EnvConfig):
     """Updates environment configuration and saves to config file."""
     try:
@@ -837,7 +894,7 @@ async def update_env_config(config: EnvConfig):
 
 
 
-@app.get("/projects/{script_id}", response_model=Script)
+@protected_router.get("/projects/{script_id}", response_model=Script)
 async def get_project(script_id: str):
     """Retrieves a project by ID."""
     script = pipeline.get_script(script_id)
@@ -847,7 +904,7 @@ async def get_project(script_id: str):
 
 
 
-@app.delete("/projects/{script_id}")
+@protected_router.delete("/projects/{script_id}")
 async def delete_project(script_id: str):
     """Deletes a project by ID. WARNING: This permanently removes the project from backend storage."""
     script = pipeline.get_script(script_id)
@@ -870,7 +927,7 @@ async def delete_project(script_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/sync_descriptions", response_model=Script)
+@protected_router.post("/projects/{script_id}/sync_descriptions", response_model=Script)
 async def sync_descriptions(script_id: str):
     """
     Syncs entity descriptions from Script module to Assets module.
@@ -893,7 +950,7 @@ class AddCharacterRequest(BaseModel):
     name: str
     description: str
 
-@app.post("/projects/{script_id}/characters", response_model=Script)
+@protected_router.post("/projects/{script_id}/characters", response_model=Script)
 async def add_character(script_id: str, request: AddCharacterRequest):
     """Adds a new character."""
     try:
@@ -904,7 +961,7 @@ async def add_character(script_id: str, request: AddCharacterRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/projects/{script_id}/characters/{char_id}", response_model=Script)
+@protected_router.delete("/projects/{script_id}/characters/{char_id}", response_model=Script)
 async def delete_character(script_id: str, char_id: str):
     """Deletes a character."""
     try:
@@ -919,7 +976,7 @@ class AddSceneRequest(BaseModel):
     name: str
     description: str
 
-@app.post("/projects/{script_id}/scenes", response_model=Script)
+@protected_router.post("/projects/{script_id}/scenes", response_model=Script)
 async def add_scene(script_id: str, request: AddSceneRequest):
     """Adds a new scene."""
     try:
@@ -930,7 +987,7 @@ async def add_scene(script_id: str, request: AddSceneRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/projects/{script_id}/scenes/{scene_id}", response_model=Script)
+@protected_router.delete("/projects/{script_id}/scenes/{scene_id}", response_model=Script)
 async def delete_scene(script_id: str, scene_id: str):
     """Deletes a scene."""
     try:
@@ -946,7 +1003,7 @@ class UpdateStyleRequest(BaseModel):
     style_prompt: Optional[str] = None
 
 
-@app.patch("/projects/{script_id}/style", response_model=Script)
+@protected_router.patch("/projects/{script_id}/style", response_model=Script)
 async def update_project_style(script_id: str, request: UpdateStyleRequest):
     """Updates the global style settings for a project."""
     try:
@@ -962,7 +1019,7 @@ async def update_project_style(script_id: str, request: UpdateStyleRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/generate_assets", response_model=Script)
+@protected_router.post("/projects/{script_id}/generate_assets", response_model=Script)
 async def generate_assets(script_id: str, background_tasks: BackgroundTasks):
     """Triggers asset generation."""
     script = pipeline.get_script(script_id)
@@ -993,7 +1050,7 @@ class GenerateMotionRefRequest(BaseModel):
     batch_size: int = 1
 
 
-@app.post("/projects/{script_id}/assets/generate_motion_ref")
+@protected_router.post("/projects/{script_id}/assets/generate_motion_ref")
 async def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest, background_tasks: BackgroundTasks):
     """Generates a Motion Reference video for an asset (Character Full Body/Headshot, Scene, or Prop)."""
     try:
@@ -1028,7 +1085,7 @@ class AnalyzeToStoryboardRequest(BaseModel):
     text: str
 
 
-@app.post("/projects/{script_id}/storyboard/analyze")
+@protected_router.post("/projects/{script_id}/storyboard/analyze")
 async def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     """
     Analyzes script text and generates storyboard frames using AI (Prompt B).
@@ -1052,7 +1109,7 @@ class RefinePromptRequest(BaseModel):
     feedback: str = Field("", max_length=2000)  # User feedback for iterative refinement
 
 
-@app.post("/projects/{script_id}/storyboard/refine_prompt")
+@protected_router.post("/projects/{script_id}/storyboard/refine_prompt")
 async def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest):
     """
     Refines a raw prompt into bilingual (CN/EN) prompts using AI (Prompt C).
@@ -1074,7 +1131,7 @@ async def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/generate_storyboard", response_model=Script)
+@protected_router.post("/projects/{script_id}/generate_storyboard", response_model=Script)
 async def generate_storyboard(script_id: str):
     """Triggers storyboard generation."""
     try:
@@ -1085,7 +1142,7 @@ async def generate_storyboard(script_id: str):
 
 
 
-@app.post("/projects/{script_id}/generate_video", response_model=Script)
+@protected_router.post("/projects/{script_id}/generate_video", response_model=Script)
 async def generate_video(script_id: str):
     """Triggers video generation."""
     try:
@@ -1096,7 +1153,7 @@ async def generate_video(script_id: str):
 
 
 
-@app.post("/projects/{script_id}/generate_audio", response_model=Script)
+@protected_router.post("/projects/{script_id}/generate_audio", response_model=Script)
 async def generate_audio(script_id: str):
     """Triggers audio generation."""
     try:
@@ -1142,7 +1199,7 @@ async def process_video_task(script_id: str, task_id: str):
         logger.error(f"Error processing video task {task_id}: {e}")
 
 
-@app.post("/projects/{script_id}/video_tasks", response_model=List[VideoTask])
+@protected_router.post("/projects/{script_id}/video_tasks", response_model=List[VideoTask])
 async def create_video_task(script_id: str, request: CreateVideoTaskRequest, background_tasks: BackgroundTasks):
     """Creates new video generation tasks."""
     try:
@@ -1188,7 +1245,7 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/assets/generate")
+@protected_router.post("/projects/{script_id}/assets/generate")
 async def generate_single_asset(script_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generates a single asset with specific options (async).
     Returns immediately with task_id for polling progress."""
@@ -1222,7 +1279,7 @@ async def generate_single_asset(script_id: str, request: GenerateAssetRequest, b
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/tasks/{task_id}")
+@protected_router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     """Returns the status of an asset generation task for polling."""
     status = pipeline.get_asset_generation_task_status(task_id)
@@ -1244,7 +1301,7 @@ class GenerateAssetVideoRequest(BaseModel):
     aspect_ratio: Optional[str] = None
 
 
-@app.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/generate_video", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/{asset_type}/{asset_id}/generate_video", response_model=Script)
 async def generate_asset_video(script_id: str, asset_type: str, asset_id: str, request: GenerateAssetVideoRequest, background_tasks: BackgroundTasks):
     """Generates a video for a specific asset (I2V)."""
     try:
@@ -1268,7 +1325,7 @@ async def generate_asset_video(script_id: str, asset_type: str, asset_id: str, r
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.delete("/projects/{script_id}/assets/{asset_type}/{asset_id}/videos/{video_id}", response_model=Script)
+@protected_router.delete("/projects/{script_id}/assets/{asset_type}/{asset_id}/videos/{video_id}", response_model=Script)
 async def delete_asset_video(script_id: str, asset_type: str, asset_id: str, video_id: str):
     """Deletes a video from an asset."""
     try:
@@ -1286,7 +1343,7 @@ async def delete_asset_video(script_id: str, asset_type: str, asset_id: str, vid
 
 
 
-@app.post("/projects/{script_id}/assets/toggle_lock", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/toggle_lock", response_model=Script)
 async def toggle_asset_lock(script_id: str, request: ToggleLockRequest):
     """Toggles the locked status of an asset."""
     try:
@@ -1303,7 +1360,7 @@ async def toggle_asset_lock(script_id: str, request: ToggleLockRequest):
 
 
 
-@app.post("/projects/{script_id}/assets/update_image", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/update_image", response_model=Script)
 async def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
     """Updates an asset's image URL manually."""
     try:
@@ -1321,7 +1378,7 @@ async def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 
 
 
-@app.post("/projects/{script_id}/assets/update_attributes", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/update_attributes", response_model=Script)
 async def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
     try:
@@ -1345,7 +1402,7 @@ class UpdateAssetDescriptionRequest(BaseModel):
     description: str
 
 
-@app.post("/projects/{script_id}/assets/update_description", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/update_description", response_model=Script)
 async def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequest):
     """Updates an asset's description."""
     try:
@@ -1369,7 +1426,7 @@ class SelectVariantRequest(BaseModel):
     variant_id: str
     generation_type: str = None  # For character: "full_body", "three_view", "headshot"
 
-@app.post("/projects/{script_id}/assets/variant/select", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/variant/select", response_model=Script)
 async def select_asset_variant(script_id: str, request: SelectVariantRequest):
     """Selects a specific variant for an asset."""
     try:
@@ -1391,7 +1448,7 @@ class DeleteVariantRequest(BaseModel):
     asset_type: str
     variant_id: str
 
-@app.post("/projects/{script_id}/assets/variant/delete", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/variant/delete", response_model=Script)
 async def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""
     try:
@@ -1415,7 +1472,7 @@ class FavoriteVariantRequest(BaseModel):
     generation_type: Optional[str] = None  # For character: 'full_body', 'three_view', 'headshot'
     is_favorited: bool
 
-@app.post("/projects/{script_id}/assets/variant/favorite", response_model=Script)
+@protected_router.post("/projects/{script_id}/assets/variant/favorite", response_model=Script)
 async def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
     """Toggles the favorite status of a variant. Favorited variants won't be auto-deleted when limit is reached."""
     try:
@@ -1433,7 +1490,7 @@ async def toggle_variant_favorite(script_id: str, request: FavoriteVariantReques
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/projects/{script_id}/model_settings", response_model=Script)
+@protected_router.post("/projects/{script_id}/model_settings", response_model=Script)
 async def update_model_settings(script_id: str, request: UpdateModelSettingsRequest):
     """Updates project's model settings for T2I/I2I/I2V and aspect ratios."""
     try:
@@ -1460,7 +1517,7 @@ class UpdatePromptConfigRequest(BaseModel):
     r2v_polish: str = ""
 
 
-@app.get("/projects/{script_id}/prompt_config")
+@protected_router.get("/projects/{script_id}/prompt_config")
 async def get_prompt_config(script_id: str):
     """Returns project prompt_config and system default prompts for reference."""
     try:
@@ -1482,7 +1539,7 @@ async def get_prompt_config(script_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.put("/projects/{script_id}/prompt_config")
+@protected_router.put("/projects/{script_id}/prompt_config")
 async def update_prompt_config(script_id: str, request: UpdatePromptConfigRequest):
     """Updates project custom prompt configuration. Empty string = use system default."""
     try:
@@ -1507,7 +1564,7 @@ class BindVoiceRequest(BaseModel):
     voice_name: str
 
 
-@app.post("/projects/{script_id}/characters/{char_id}/voice", response_model=Script)
+@protected_router.post("/projects/{script_id}/characters/{char_id}/voice", response_model=Script)
 async def bind_voice(script_id: str, char_id: str, request: BindVoiceRequest):
     """Binds a voice to a character."""
     try:
@@ -1523,7 +1580,7 @@ class UpdateVoiceParamsRequest(BaseModel):
     volume: int = 50
 
 
-@app.put("/projects/{script_id}/characters/{char_id}/voice_params", response_model=Script)
+@protected_router.put("/projects/{script_id}/characters/{char_id}/voice_params", response_model=Script)
 async def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParamsRequest):
     """Updates voice parameters for a character."""
     script = pipeline.get_script(script_id)
@@ -1539,7 +1596,7 @@ async def update_voice_params(script_id: str, char_id: str, request: UpdateVoice
     return signed_response(script)
 
 
-@app.get("/voices")
+@protected_router.get("/voices")
 async def get_voices():
     """Returns list of available voices."""
     return pipeline.audio_generator.get_available_voices()
@@ -1551,7 +1608,7 @@ class GenerateLineAudioRequest(BaseModel):
     volume: int = 50
 
 
-@app.post("/projects/{script_id}/frames/{frame_id}/audio", response_model=Script)
+@protected_router.post("/projects/{script_id}/frames/{frame_id}/audio", response_model=Script)
 async def generate_line_audio(script_id: str, frame_id: str, request: GenerateLineAudioRequest):
     """Generates audio for a specific frame with parameters."""
     try:
@@ -1561,7 +1618,7 @@ async def generate_line_audio(script_id: str, frame_id: str, request: GenerateLi
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/mix/generate_sfx", response_model=Script)
+@protected_router.post("/projects/{script_id}/mix/generate_sfx", response_model=Script)
 async def generate_mix_sfx(script_id: str):
     """Triggers Video-to-Audio SFX generation for all frames."""
     # Re-using generate_audio for now as it covers everything, 
@@ -1574,7 +1631,7 @@ async def generate_mix_sfx(script_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/mix/generate_bgm", response_model=Script)
+@protected_router.post("/projects/{script_id}/mix/generate_bgm", response_model=Script)
 async def generate_mix_bgm(script_id: str):
     """Triggers BGM generation."""
     try:
@@ -1588,7 +1645,7 @@ class ToggleFrameLockRequest(BaseModel):
     frame_id: str
 
 
-@app.post("/projects/{script_id}/frames/toggle_lock", response_model=Script)
+@protected_router.post("/projects/{script_id}/frames/toggle_lock", response_model=Script)
 async def toggle_frame_lock(script_id: str, request: ToggleFrameLockRequest):
     """Toggles the locked status of a frame."""
     try:
@@ -1612,7 +1669,7 @@ class UpdateFrameRequest(BaseModel):
     scene_id: Optional[str] = None
     character_ids: Optional[List[str]] = None
 
-@app.post("/projects/{script_id}/frames/update", response_model=Script)
+@protected_router.post("/projects/{script_id}/frames/update", response_model=Script)
 async def update_frame(script_id: str, request: UpdateFrameRequest):
     """Updates frame data (prompt, scene, characters, etc.)."""
     try:
@@ -1638,7 +1695,7 @@ class AddFrameRequest(BaseModel):
     camera_angle: str = "medium_shot"
     insert_at: Optional[int] = None
 
-@app.post("/projects/{script_id}/frames", response_model=Script)
+@protected_router.post("/projects/{script_id}/frames", response_model=Script)
 async def add_frame(script_id: str, request: AddFrameRequest):
     """Adds a new storyboard frame."""
     try:
@@ -1655,7 +1712,7 @@ async def add_frame(script_id: str, request: AddFrameRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.delete("/projects/{script_id}/frames/{frame_id}", response_model=Script)
+@protected_router.delete("/projects/{script_id}/frames/{frame_id}", response_model=Script)
 async def delete_frame(script_id: str, frame_id: str):
     """Deletes a storyboard frame."""
     try:
@@ -1670,7 +1727,7 @@ class CopyFrameRequest(BaseModel):
     frame_id: str
     insert_at: Optional[int] = None
 
-@app.post("/projects/{script_id}/frames/copy", response_model=Script)
+@protected_router.post("/projects/{script_id}/frames/copy", response_model=Script)
 async def copy_frame(script_id: str, request: CopyFrameRequest):
     """Copies a storyboard frame."""
     try:
@@ -1684,7 +1741,7 @@ async def copy_frame(script_id: str, request: CopyFrameRequest):
 class ReorderFramesRequest(BaseModel):
     frame_ids: List[str]
 
-@app.put("/projects/{script_id}/frames/reorder", response_model=Script)
+@protected_router.put("/projects/{script_id}/frames/reorder", response_model=Script)
 async def reorder_frames(script_id: str, request: ReorderFramesRequest):
     """Reorders storyboard frames."""
     try:
@@ -1702,7 +1759,7 @@ class RenderFrameRequest(BaseModel):
     batch_size: int = 1
 
 
-@app.post("/projects/{script_id}/storyboard/render", response_model=Script)
+@protected_router.post("/projects/{script_id}/storyboard/render", response_model=Script)
 async def render_frame(script_id: str, request: RenderFrameRequest):
     """Renders a specific frame using composition data (I2I)."""
     try:
@@ -1727,7 +1784,7 @@ class SelectVideoRequest(BaseModel):
     video_id: str
 
 
-@app.post("/projects/{script_id}/frames/{frame_id}/select_video", response_model=Script)
+@protected_router.post("/projects/{script_id}/frames/{frame_id}/select_video", response_model=Script)
 async def select_video(script_id: str, frame_id: str, request: SelectVideoRequest):
     """Selects a video variant for a specific frame."""
     try:
@@ -1743,7 +1800,7 @@ class ExtractLastFrameRequest(BaseModel):
     video_task_id: str
 
 
-@app.post("/projects/{script_id}/frames/{frame_id}/extract_last_frame")
+@protected_router.post("/projects/{script_id}/frames/{frame_id}/extract_last_frame")
 async def extract_last_frame(script_id: str, frame_id: str, request: ExtractLastFrameRequest):
     """Extract the last frame from a completed video and add it as a variant to the frame's rendered_image_asset."""
     try:
@@ -1758,7 +1815,7 @@ async def extract_last_frame(script_id: str, frame_id: str, request: ExtractLast
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/frames/{frame_id}/upload_image")
+@protected_router.post("/projects/{script_id}/frames/{frame_id}/upload_image")
 async def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = File(...)):
     """Upload an image as a variant for a frame's rendered_image_asset."""
     try:
@@ -1779,7 +1836,7 @@ async def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = F
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/merge", response_model=Script)
+@protected_router.post("/projects/{script_id}/merge", response_model=Script)
 async def merge_videos(script_id: str):
     """Merge all selected frame videos into final output"""
     import traceback
@@ -1809,7 +1866,7 @@ class ExportRequest(BaseModel):
     format: str = "mp4"
     subtitles: str = "none"
 
-@app.post("/projects/{script_id}/export")
+@protected_router.post("/projects/{script_id}/export")
 async def export_project(script_id: str, request: ExportRequest):
     """Export project video by merging all selected frame videos.
 
@@ -1854,7 +1911,7 @@ class SaveArtDirectionRequest(BaseModel):
     ai_recommendations: List[Dict[str, Any]] = []
 
 
-@app.post("/projects/{script_id}/art_direction/analyze")
+@protected_router.post("/projects/{script_id}/art_direction/analyze")
 async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest):
     """Analyze script content and recommend visual styles using LLM"""
     try:
@@ -1879,7 +1936,7 @@ async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/projects/{script_id}/art_direction/save", response_model=Script)
+@protected_router.post("/projects/{script_id}/art_direction/save", response_model=Script)
 async def save_art_direction(script_id: str, request: SaveArtDirectionRequest):
     """Save Art Direction configuration to the project"""
     try:
@@ -1899,7 +1956,7 @@ async def save_art_direction(script_id: str, request: SaveArtDirectionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/art_direction/presets")
+@protected_router.get("/art_direction/presets")
 async def get_style_presets():
     """Get built-in style presets"""
     try:
@@ -1953,7 +2010,7 @@ class PolishVideoPromptRequest(BaseModel):
     script_id: str = ""  # Optional: project ID to load custom prompt config
 
 
-@app.post("/video/polish_prompt")
+@protected_router.post("/video/polish_prompt")
 async def polish_video_prompt(request: PolishVideoPromptRequest):
     """Polishes a video generation prompt using LLM. Returns bilingual prompts."""
     try:
@@ -1981,7 +2038,7 @@ class PolishR2VPromptRequest(BaseModel):
     script_id: str = ""  # Optional: project ID to load custom prompt config
 
 
-@app.post("/video/polish_r2v_prompt")
+@protected_router.post("/video/polish_r2v_prompt")
 async def polish_r2v_prompt(request: PolishR2VPromptRequest):
     """Polishes a R2V (Reference-to-Video) prompt using LLM. Returns bilingual prompts."""
     try:
@@ -2001,7 +2058,7 @@ async def polish_r2v_prompt(request: PolishR2VPromptRequest):
 
 # ===== Environment Configuration Endpoints =====
 
-@app.get("/config/env")
+@protected_router.get("/config/env")
 async def get_env_config():
     """Get current environment configuration."""
     try:
@@ -2043,7 +2100,7 @@ class CreatePropRequest(BaseModel):
     name: str
     description: str = ""
 
-@app.post("/projects/{script_id}/props")
+@protected_router.post("/projects/{script_id}/props")
 async def create_prop(script_id: str, request: CreatePropRequest):
     """Creates a new prop in the project."""
     script = pipeline.get_script(script_id)
@@ -2067,7 +2124,7 @@ async def create_prop(script_id: str, request: CreatePropRequest):
     return signed_response(script)
 
 
-@app.delete("/projects/{script_id}/props/{prop_id}")
+@protected_router.delete("/projects/{script_id}/props/{prop_id}")
 async def delete_prop(script_id: str, prop_id: str):
     """Deletes a prop from the project."""
     script = pipeline.get_script(script_id)
@@ -2089,3 +2146,7 @@ async def delete_prop(script_id: str, prop_id: str):
     pipeline._save_data()
 
     return signed_response(script)
+
+
+# Register protected routes
+app.include_router(protected_router)

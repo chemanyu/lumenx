@@ -1,8 +1,9 @@
 "use client";
 
-import { FolderOpen, Library, Settings } from "lucide-react";
+import { FolderOpen, Library, Settings, LogOut } from "lucide-react";
 import clsx from "clsx";
 import LumenXBranding from "./LumenXBranding";
+import { useAuthStore } from "@/store/authStore";
 
 export type GlobalTab = "workspace" | "library" | "settings";
 
@@ -18,9 +19,17 @@ const NAV_ITEMS: { id: GlobalTab; label: string; icon: typeof FolderOpen; hash: 
 ];
 
 export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarProps) {
+  const user = useAuthStore((s) => s.user);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
+
   const handleNav = (item: (typeof NAV_ITEMS)[number]) => {
     onTabChange(item.id);
     window.location.hash = item.hash;
+  };
+
+  const handleLogout = () => {
+    clearAuth();
+    window.location.hash = "#/login";
   };
 
   return (
@@ -57,8 +66,27 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-glass-border">
-        <span className="text-xs text-gray-600 px-4">v0.1.0</span>
+      <div className="p-4 border-t border-glass-border space-y-3">
+        {user && (
+          <div className="flex items-center gap-3 px-1">
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs text-primary font-medium">{user.name?.[0] ?? "?"}</span>
+              </div>
+            )}
+            <span className="text-xs text-gray-300 truncate flex-1">{user.name}</span>
+            <button
+              onClick={handleLogout}
+              title="退出登录"
+              className="text-gray-500 hover:text-red-400 transition-colors flex-shrink-0"
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        )}
+        <span className="text-xs text-gray-600 px-1">v0.1.0</span>
       </div>
     </aside>
   );

@@ -3,19 +3,23 @@
 import { useState, useEffect } from "react";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 export default function EnvConfigChecker() {
   const [isEnvDialogOpen, setIsEnvDialogOpen] = useState(false);
   const [envRequired, setEnvRequired] = useState(false);
   const [hasChecked, setHasChecked] = useState(false);
+  const token = useAuthStore((s) => s.token);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
-    // 只在客户端执行，且只检查一次
+    // 只在客户端执行、只检查一次、且已登录后才请求
     if (typeof window === 'undefined' || hasChecked) return;
-    
+    if (!isAuthenticated()) return;
+
     checkEnvConfig();
     setHasChecked(true);
-  }, [hasChecked]);
+  }, [hasChecked, token, isAuthenticated]);
 
   const checkEnvConfig = async () => {
     try {
@@ -28,9 +32,10 @@ export default function EnvConfigChecker() {
         setEnvRequired(true);
         setIsEnvDialogOpen(true);
       }
-    } catch (error) {
+    } catch (error: any) {
+      // 401 表示未登录，忽略（AuthGuard 会处理跳转）
+      if (error?.response?.status === 401) return;
       console.error("Failed to check env config:", error);
-      // 如果API调用失败，也显示配置对话框
       setEnvRequired(true);
       setIsEnvDialogOpen(true);
     }

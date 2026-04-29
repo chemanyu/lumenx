@@ -1,5 +1,5 @@
 import "./globals.css";
-import EnvConfigChecker from "@/components/EnvConfigChecker";
+import AuthGuard from "@/components/AuthGuard";
 
 export default function RootLayout({
   children,
@@ -13,8 +13,9 @@ export default function RootLayout({
         <meta name="description" content="AI-Native Motion Comic Creation Platform" />
       </head>
       <body className="font-sans bg-background text-foreground antialiased">
-        <EnvConfigChecker />
-        {children}
+        <AuthGuard>
+          {children}
+        </AuthGuard>
       </body>
     </html>
   );

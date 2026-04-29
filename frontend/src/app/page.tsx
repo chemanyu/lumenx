@@ -7,6 +7,7 @@ import { useProjectStore, Series, Project } from "@/store/projectStore";
 import ProjectCard from "@/components/project/ProjectCard";
 import CreateProjectDialog from "@/components/project/CreateProjectDialog";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
+import EnvConfigChecker from "@/components/EnvConfigChecker";
 import CreativeCanvas from "@/components/canvas/CreativeCanvas";
 import AppShell from "@/components/layout/AppShell";
 import type { GlobalTab } from "@/components/layout/GlobalSidebar";
@@ -18,6 +19,7 @@ const SeriesDetailPage = dynamic(() => import("@/components/series/SeriesDetailP
 const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDialog"), { ssr: false });
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
+const LoginPage = dynamic(() => import("@/app/login/page"), { ssr: false });
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -316,7 +318,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'login'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
@@ -330,8 +332,9 @@ export default function Home() {
   const setProjects = useProjectStore((state) => state.setProjects);
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
 
-  // Sync projects and series from backend on mount
+  // Sync projects and series from backend on mount — skip when on login page
   useEffect(() => {
+    if (window.location.hash.startsWith('#/login')) return;
     syncProjects();
     fetchSeriesList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -446,6 +449,13 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash.startsWith('#/login')) {
+        setCurrentView('login');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       // Default: workspace
       setCurrentView('home');
       setActiveTab('workspace');
@@ -458,6 +468,11 @@ export default function Home() {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  // 登录页 — 全屏，无 AppShell
+  if (currentView === 'login') {
+    return <LoginPage />;
+  }
 
   // 项目详情页 — 全屏，无 GlobalSidebar
   if (currentView === 'project' && projectId) {
@@ -628,6 +643,9 @@ export default function Home() {
 
   return (
     <main className="relative h-screen w-screen bg-background flex flex-col">
+      {/* EnvConfigChecker — only shown after login */}
+      <EnvConfigChecker />
+
       {/* Background Canvas */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <CreativeCanvas />

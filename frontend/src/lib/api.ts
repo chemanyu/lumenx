@@ -25,6 +25,48 @@ const getApiUrl = (): string => {
 
 export const API_URL = getApiUrl();
 
+// ── Auth: inject Bearer token into every axios request ──────────
+axios.interceptors.request.use((config) => {
+    if (typeof window !== "undefined") {
+        const raw = localStorage.getItem("lumenx-auth");
+        if (raw) {
+            try {
+                const token = JSON.parse(raw)?.state?.token;
+                if (token) config.headers.Authorization = `Bearer ${token}`;
+            } catch {}
+        }
+    }
+    return config;
+});
+
+// ── Auth: redirect to login on 401 ──────────────────────────────
+axios.interceptors.response.use(
+    (r) => r,
+    (error) => {
+        if (error?.response?.status === 401 && typeof window !== "undefined") {
+            localStorage.removeItem("lumenx-auth");
+            window.location.hash = "#/login";
+        }
+        return Promise.reject(error);
+    }
+);
+
+// ── Authenticated fetch wrapper (for raw fetch() calls) ─────────
+function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+    let token: string | null = null;
+    if (typeof window !== "undefined") {
+        const raw = localStorage.getItem("lumenx-auth");
+        if (raw) {
+            try {
+                token = JSON.parse(raw)?.state?.token ?? null;
+            } catch {}
+        }
+    }
+    const headers = new Headers(options.headers);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...options, headers });
+}
+
 export type ProviderMode = "dashscope" | "vendor";
 
 export interface EnvConfigPayload {
@@ -163,7 +205,7 @@ export const api = {
     uploadFile: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await fetch(`${API_URL}/upload`, {
+        const response = await authFetch(`${API_URL}/upload`, {
             method: "POST",
             body: formData,
         });
@@ -193,7 +235,7 @@ export const api = {
             params.append("description", description);
         }
 
-        const response = await fetch(
+        const response = await authFetch(
             `${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/upload?${params.toString()}`,
             {
                 method: "POST",
@@ -488,13 +530,13 @@ export const api = {
     },
 
     getVoices: async () => {
-        const response = await fetch(`${API_URL}/voices`);
+        const response = await authFetch(`${API_URL}/voices`);
         if (!response.ok) throw new Error("Failed to fetch voices");
         return response.json();
     },
 
     bindVoice: async (scriptId: string, charId: string, voiceId: string, voiceName: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice`, {
+        const response = await authFetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ voice_id: voiceId, voice_name: voiceName }),
@@ -504,7 +546,7 @@ export const api = {
     },
 
     generateAudio: async (scriptId: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
+        const response = await authFetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to generate audio");
@@ -512,7 +554,7 @@ export const api = {
     },
 
     generateLineAudio: async (scriptId: string, frameId: string, speed: number, pitch: number, volume: number = 50) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio`, {
+        const response = await authFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume }),
@@ -522,7 +564,7 @@ export const api = {
     },
 
     updateVoiceParams: async (scriptId: string, charId: string, speed: number, pitch: number, volume: number) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice_params`, {
+        const response = await authFetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice_params`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume }),
@@ -532,7 +574,7 @@ export const api = {
     },
 
     exportProject: async (scriptId: string, options: any) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/export`, {
+        const response = await authFetch(`${API_URL}/projects/${scriptId}/export`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(options),
@@ -568,7 +610,7 @@ export const api = {
     uploadFrameImage: async (scriptId: string, frameId: string, file: File) => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await fetch(
+        const response = await authFetch(
             `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_image`,
             { method: "POST", body: formData }
         );
