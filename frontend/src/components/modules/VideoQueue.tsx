@@ -10,9 +10,10 @@ import { getAssetUrl } from "@/lib/utils";
 interface VideoQueueProps {
     tasks: VideoTask[];
     onRemix: (task: VideoTask) => void;
+    onDelete: (task: VideoTask) => void;
 }
 
-export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
+export default function VideoQueue({ tasks, onRemix, onDelete }: VideoQueueProps) {
     const [filter, setFilter] = useState<"all" | "processing" | "completed" | "failed">("all");
 
     const filteredTasks = tasks.filter(t => {
@@ -59,7 +60,7 @@ export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <AnimatePresence mode="popLayout">
                     {filteredTasks.map((task) => (
-                        <TaskCard key={task.id} task={task} onRemix={onRemix} />
+                        <TaskCard key={task.id} task={task} onRemix={onRemix} onDelete={onDelete} />
                     ))}
 
                     {filteredTasks.length === 0 && (
@@ -73,7 +74,7 @@ export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
     );
 }
 
-function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) => void }) {
+function TaskCard({ task, onRemix, onDelete }: { task: VideoTask; onRemix: (t: VideoTask) => void; onDelete: (t: VideoTask) => void }) {
     const isCompleted = task.status === "completed";
     const isProcessing = task.status === "processing" || task.status === "pending";
     const isFailed = task.status === "failed";
@@ -213,7 +214,11 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                                     <Download size={14} />
                                 </button>
                             </div>
-                            <button className="p-1.5 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-400">
+                            <button
+                                onClick={() => onDelete(task)}
+                                className="p-1.5 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-400"
+                                title="删除任务"
+                            >
                                 <Trash2 size={14} />
                             </button>
                         </div>
@@ -224,9 +229,18 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
             {/* Failed State */}
             {isFailed && (
                 <div className="p-3">
-                    <div className="flex items-center gap-2 text-red-400 mb-2">
-                        <AlertCircle size={16} />
-                        <span className="text-sm font-medium">生成失败</span>
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-red-400">
+                            <AlertCircle size={16} />
+                            <span className="text-sm font-medium">生成失败</span>
+                        </div>
+                        <button
+                            onClick={() => onDelete(task)}
+                            className="p-1.5 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-400"
+                            title="删除任务"
+                        >
+                            <Trash2 size={14} />
+                        </button>
                     </div>
                     <p className="text-xs text-gray-500 mb-3">未知错误，请重试</p>
                     <button

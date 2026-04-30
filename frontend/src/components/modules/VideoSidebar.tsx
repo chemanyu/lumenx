@@ -10,11 +10,12 @@ import { I2V_MODELS, DurationConfig, ModelParamSupport, VideoParams, GRID_COLS_C
 interface VideoSidebarProps {
     tasks: VideoTask[];
     onRemix: (task: VideoTask) => void;
+    onDelete: (task: VideoTask) => void;
     params: VideoParams;
     setParams: (params: VideoParams) => void;
 }
 
-export default function VideoSidebar({ tasks, onRemix, params, setParams }: VideoSidebarProps) {
+export default function VideoSidebar({ tasks, onRemix, onDelete, params, setParams }: VideoSidebarProps) {
     const [activeTab, setActiveTab] = useState<"settings" | "queue">("settings");
     const [isUploadingAudio, setIsUploadingAudio] = useState(false);
     const audioInputRef = useRef<HTMLInputElement>(null);
@@ -618,7 +619,7 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
                             exit={{ opacity: 0, x: 20 }}
                             className="absolute inset-0"
                         >
-                            <VideoQueue tasks={tasks} onRemix={onRemix} />
+                            <VideoQueue tasks={tasks} onRemix={onRemix} onDelete={onDelete} />
                         </motion.div>
                     )}
                 </AnimatePresence>

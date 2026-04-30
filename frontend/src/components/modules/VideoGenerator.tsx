@@ -83,6 +83,24 @@ export default function VideoGenerator() {
         }
     };
 
+    const handleDelete = async (task: VideoTask) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.deleteVideoTask(currentProject.id, task.id);
+            if (updatedProject.video_tasks !== undefined) {
+                setTasks(updatedProject.video_tasks);
+                updateProject(currentProject.id, { video_tasks: updatedProject.video_tasks });
+            } else {
+                // Optimistic remove
+                const newTasks = tasks.filter(t => t.id !== task.id);
+                setTasks(newTasks);
+                updateProject(currentProject.id, { video_tasks: newTasks });
+            }
+        } catch (error) {
+            console.error("Failed to delete video task:", error);
+        }
+    };
+
     const handleRemix = (task: VideoTask) => {
         setRemixData({
             image_url: task.image_url,
@@ -128,6 +146,7 @@ export default function VideoGenerator() {
                 <VideoSidebar
                     tasks={tasks}
                     onRemix={handleRemix}
+                    onDelete={handleDelete}
                     params={params}
                     setParams={setParams}
                 />

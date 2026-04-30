@@ -2212,6 +2212,30 @@ class ComicGenPipeline:
         self._save_data()
         return script, task_id
 
+    def delete_video_task(self, script_id: str, task_id: str) -> Script:
+        """Deletes a video task from the project queue."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        task_to_delete = next((t for t in (script.video_tasks or []) if t.id == task_id), None)
+        if not task_to_delete:
+            raise ValueError(f"Video task {task_id} not found")
+
+        script.video_tasks = [t for t in script.video_tasks if t.id != task_id]
+
+        try:
+            if task_to_delete.video_url:
+                video_path = os.path.join("output", task_to_delete.video_url)
+                if os.path.exists(video_path):
+                    os.remove(video_path)
+                    logger.info(f"Deleted video file: {video_path}")
+        except Exception as e:
+            logger.warning(f"Failed to delete video file: {e}")
+
+        self._save_data()
+        return script
+
     def delete_asset_video(self, script_id: str, asset_id: str, asset_type: str, video_id: str) -> Script:
         """Deletes a video from an asset."""
         script = self.scripts.get(script_id)

@@ -1245,6 +1245,18 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@protected_router.delete("/projects/{script_id}/video_tasks/{task_id}")
+async def delete_video_task(script_id: str, task_id: str):
+    try:
+        script = pipeline.delete_video_task(script_id, task_id)
+        return signed_response(script.model_dump() if hasattr(script, 'model_dump') else script.dict())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to delete video task")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @protected_router.post("/projects/{script_id}/assets/generate")
 async def generate_single_asset(script_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generates a single asset with specific options (async).

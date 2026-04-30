@@ -202,6 +202,11 @@ export const api = {
     },
 
 
+    deleteVideoTask: async (scriptId: string, taskId: string) => {
+        const res = await axios.delete(`${API_URL}/projects/${scriptId}/video_tasks/${taskId}`);
+        return res.data;
+    },
+
     uploadFile: async (file: File) => {
         const formData = new FormData();
         formData.append("file", file);
