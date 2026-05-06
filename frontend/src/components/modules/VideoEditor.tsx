@@ -49,8 +49,19 @@ async function uploadFile(
 ): Promise<string> {
   const formData = new FormData();
   formData.append("file", file);
+
+  let token: string | null = null;
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem("lumenx-auth");
+    if (raw) {
+      try {
+        token = JSON.parse(raw)?.state?.token ?? null;
+      } catch {}
+    }
+  }
+
   const res = await axios.post(`${API_URL}${endpoint}`, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
     onUploadProgress: (e) => {
       if (e.total) onProgress(Math.round((e.loaded / e.total) * 100));
     },
