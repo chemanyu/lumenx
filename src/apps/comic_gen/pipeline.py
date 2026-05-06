@@ -16,7 +16,7 @@ from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
 from ...utils import get_logger
-from ...utils.oss_utils import is_object_key
+from ...utils.oss_utils import is_object_key, extract_object_key_from_signed_url
 from ...utils.provider_registry import resolve_provider_backend
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
 
@@ -1401,11 +1401,29 @@ class ComicGenPipeline:
             raise ValueError("Script not found")
         
         task_id = str(uuid.uuid4())
-        
+
         # If R2V mode is selected, use the R2V model
         if generation_mode == "r2v":
             model = "wan2.6-r2v"
-        
+
+        # If image_url is a short-lived signed OSS URL, convert back to object key
+        # so it stays valid after the signature expires.
+        if image_url:
+            extracted_key = extract_object_key_from_signed_url(image_url)
+            if extracted_key:
+                image_url = extracted_key
+
+        # Same for audio_url and reference_video_urls (uploaded via /upload).
+        if audio_url:
+            extracted_audio_key = extract_object_key_from_signed_url(audio_url)
+            if extracted_audio_key:
+                audio_url = extracted_audio_key
+        if reference_video_urls:
+            reference_video_urls = [
+                extract_object_key_from_signed_url(u) or u
+                for u in reference_video_urls
+            ]
+
         # Snapshot the input image to ensure consistency
         snapshot_url = image_url
         try:
@@ -1600,18 +1618,26 @@ class ComicGenPipeline:
         """Downloads an image to a temporary file."""
         import requests
         import tempfile
-        
+
         # If it's a local file path (relative to output)
         if not url.startswith("http"):
-            local_path = _safe_resolve_path("output", url)
-            if os.path.exists(local_path):
-                return local_path
-                
+            # OSS object key (e.g. "lumenx/assets/xxx.png") — sign and download.
+            if is_object_key(url):
+                from ...utils.oss_utils import OSSImageUploader
+                signed = OSSImageUploader().sign_url_for_api(url)
+                if not signed:
+                    raise ValueError(f"Failed to sign object key for download: {url}")
+                url = signed
+            else:
+                local_path = _safe_resolve_path("output", url)
+                if os.path.exists(local_path):
+                    return local_path
+
         # Download from URL
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
-            
+
             # Create temp file
             fd, path = tempfile.mkstemp(suffix=".png")
             with os.fdopen(fd, 'wb') as f:

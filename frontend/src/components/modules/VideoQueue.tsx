@@ -148,19 +148,23 @@ function TaskCard({ task, onRemix, onDelete }: { task: VideoTask; onRemix: (t: V
                     </div>
 
                     {/* Visual Comparison */}
-                    <div className="flex h-32 relative group">
+                    <div className="flex aspect-video relative group bg-black">
                         {/* Input Image/Videos (Left) */}
-                        <div className="w-1/2 relative border-r border-white/10">
+                        <div className="w-1/2 relative border-r border-white/10 bg-black flex items-center justify-center">
                             {task.image_url ? (
-                                <img src={getDisplayUrl(task.image_url)} alt="Input" className="w-full h-full object-cover" />
+                                <img
+                                    src={getDisplayUrl(task.image_url)}
+                                    alt="Input"
+                                    className="max-w-full max-h-full object-contain"
+                                />
                             ) : task.reference_video_urls && task.reference_video_urls.length > 0 ? (
                                 /* R2V: Show reference video thumbnails */
                                 <div className="w-full h-full grid grid-cols-2 gap-0.5 bg-purple-900/20">
                                     {task.reference_video_urls.slice(0, 4).map((url, idx) => (
-                                        <div key={idx} className="relative bg-black/50 overflow-hidden">
+                                        <div key={idx} className="relative bg-black/50 overflow-hidden flex items-center justify-center">
                                             <video
                                                 src={getAssetUrl(url)}
-                                                className="w-full h-full object-cover"
+                                                className="max-w-full max-h-full object-contain"
                                                 muted
                                                 preload="metadata"
                                             />
@@ -179,23 +183,23 @@ function TaskCard({ task, onRemix, onDelete }: { task: VideoTask; onRemix: (t: V
                                     R2V Input
                                 </div>
                             )}
-                            <div className="absolute top-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-gray-300">Input</div>
+                            <div className="absolute top-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-gray-300 z-10">Input</div>
                         </div>
 
                         {/* Output Video (Right) */}
-                        <div className="w-1/2 relative bg-black">
+                        <div className="w-1/2 relative bg-black flex items-center justify-center">
                             {task.video_url ? (
                                 <video
                                     src={getAssetUrl(task.video_url)}
                                     controls
-                                    className="w-full h-full object-cover"
+                                    className="max-w-full max-h-full object-contain"
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-red-500 text-xs">
                                     Error
                                 </div>
                             )}
-                            <div className="absolute top-2 right-2 bg-primary/80 px-1.5 py-0.5 rounded text-[10px] text-white">Result</div>
+                            <div className="absolute top-2 right-2 bg-primary/80 px-1.5 py-0.5 rounded text-[10px] text-white z-10">Result</div>
                         </div>
                     </div>
 

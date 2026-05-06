@@ -3,6 +3,7 @@ import oss2
 import hashlib
 import time
 from typing import Optional, Tuple
+from urllib.parse import urlparse, unquote
 from . import get_logger
 from .media_refs import classify_media_ref, MEDIA_REF_LOCAL_PATH, MEDIA_REF_OBJECT_KEY
 
@@ -287,18 +288,53 @@ def sign_oss_urls_in_data(data, uploader: OSSImageUploader = None):
 def convert_local_path_to_object_key(local_path: str, project_id: str = None) -> str:
     """
     Convert a local relative path to an OSS Object Key format.
-    
-    Example: 
+
+    Example:
         "assets/characters/char_001.png" -> "lumenx/proj_123/assets/characters/char_001.png"
     """
     base_path = get_oss_base_path()
-    
+
     # Remove "output/" prefix if present
     if local_path.startswith("output/"):
         local_path = local_path[7:]
-    
+
     # Build Object Key
     if project_id:
         return f"{base_path}/{project_id}/{local_path}"
     else:
         return f"{base_path}/{local_path}"
+
+
+def extract_object_key_from_signed_url(value: str) -> Optional[str]:
+    """
+    If `value` is a signed OSS URL pointing to the configured bucket,
+    return the contained object key (path part, with OSS_BASE_PATH prefix).
+    Otherwise return None.
+
+    The signed URL is short-lived (~2h). Storing it directly causes 403 after
+    expiry. Convert back to a stable object key before persisting.
+    """
+    if not isinstance(value, str) or not value.startswith(("http://", "https://")):
+        return None
+
+    bucket_name = os.getenv("OSS_BUCKET_NAME")
+    endpoint = os.getenv("OSS_ENDPOINT")
+    if not bucket_name or not endpoint:
+        return None
+
+    try:
+        parsed = urlparse(value)
+    except Exception:
+        return None
+
+    host = parsed.netloc.lower()
+    endpoint_host = endpoint.lower().replace("https://", "").replace("http://", "").rstrip("/")
+    expected_host = f"{bucket_name}.{endpoint_host}"
+    if host != expected_host:
+        return None
+
+    object_key = unquote(parsed.path).lstrip("/")
+    base_path = get_oss_base_path()
+    if base_path and not object_key.startswith(f"{base_path}/"):
+        return None
+    return object_key or None
